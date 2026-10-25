@@ -1,0 +1,2312 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Urban Street Runner - Original Pixel Edition</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            background-color: #020617;
+        }
+
+        /* Renderizado Pixel-Art nítido sin ningún efecto borroso */
+        canvas {
+            touch-action: none;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            -ms-interpolation-mode: nearest-neighbor;
+        }
+
+        .touch-btn {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(8px);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 9999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            transition: transform 0.05s ease, background-color 0.1s;
+        }
+
+        .touch-btn:active, .touch-btn.active {
+            background: rgba(255, 255, 255, 0.4);
+            transform: scale(0.92);
+        }
+
+        .action-btn {
+            background: linear-gradient(135deg, #06b6d4, #3b82f6);
+            border: 3px solid #67e8f9;
+        }
+
+        .dash-btn {
+            background: linear-gradient(135deg, #f59e0b, #ec4899);
+            border: 3px solid #fde047;
+        }
+
+        .char-card {
+            background: rgba(15, 23, 42, 0.85);
+            border: 2px solid rgba(255, 255, 255, 0.15);
+            transition: all 0.2s ease;
+        }
+
+        .char-card:hover, .char-card.selected {
+            border-color: #38bdf8;
+            background: rgba(14, 165, 233, 0.25);
+            transform: translateY(-4px);
+            box-shadow: 0 10px 20px -5px rgba(56, 189, 248, 0.5);
+        }
+
+        ::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-between items-center overflow-hidden select-none">
+
+    <!-- Área del Canvas Principal y Overlays -->
+    <div class="relative w-full flex-1 flex justify-center items-center bg-slate-950 overflow-hidden">
+        
+        <!-- Canvas de Renderizado del Juego -->
+        <canvas id="gameCanvas" class="shadow-2xl rounded-lg max-w-full max-h-full"></canvas>
+
+        <!-- HUD Superior Modificado: Información clave en la esquina superior izquierda -->
+        <div id="hud" class="absolute top-3 left-3 right-3 flex justify-between items-start pointer-events-none hidden z-10">
+            
+            <!-- Bloque Superior Izquierdo: Nivel + Contador de Vidas Completo -->
+            <div class="flex flex-col gap-1 bg-slate-900/90 backdrop-blur-md p-2.5 rounded-2xl border border-white/10 shadow-2xl">
+                <div class="flex items-center gap-2">
+                    <span class="bg-cyan-500/20 text-cyan-300 border border-cyan-400 px-2.5 py-0.5 rounded-lg text-xs sm:text-sm font-black" id="levelDisplay">NIVEL 1</span>
+                    <span id="livesText" class="text-xs sm:text-sm text-red-400 font-black tracking-wider">(3/5 VIDAS)</span>
+                </div>
+                <!-- Vidas con Corazones -->
+                <div class="flex items-center bg-red-950/70 border border-red-500/40 px-2.5 py-1 rounded-xl gap-1.5 mt-0.5">
+                    <span class="text-xs text-red-300 font-extrabold uppercase tracking-wide">VIDAS:</span>
+                    <span id="heartsContainer" class="flex text-red-500 text-sm sm:text-lg">❤️❤️❤️🖤🖤</span>
+                    <span id="missingLivesText" class="text-[10px] sm:text-xs text-amber-300/80 font-bold ml-1">(Faltan: 2)</span>
+                </div>
+            </div>
+
+            <!-- Indicador de Vida del Jefe -->
+            <div id="bossHpContainer" class="hidden flex items-center gap-2 bg-red-950/80 px-3 py-2 rounded-xl border border-red-500/50 shadow-lg mt-1">
+                <span id="bossNameLabel" class="text-xs font-black text-red-400 uppercase tracking-wider">👾 JEFE:</span>
+                <div class="w-24 sm:w-36 h-3 bg-slate-950 rounded-full overflow-hidden border border-red-500/40">
+                    <div id="bossHpBar" class="h-full bg-gradient-to-r from-red-600 via-orange-500 to-yellow-400 w-full transition-all duration-150"></div>
+                </div>
+            </div>
+
+            <!-- Indicadores de Poderes Especiales (Arriba a la derecha) -->
+            <div class="flex flex-col sm:flex-row items-end sm:items-center gap-1.5 bg-slate-900/90 backdrop-blur-md p-2 rounded-2xl border border-white/10">
+                <div class="flex items-center gap-1.5 bg-slate-800/80 px-2 py-1 rounded-lg border border-amber-400/40">
+                    <span class="text-amber-400 text-xs font-black" id="powerLabel">⚡ PODER 1 [F]:</span>
+                    <div class="w-12 sm:w-16 h-2.5 sm:h-3.5 bg-slate-950 rounded-full overflow-hidden border border-amber-400/30">
+                        <div id="dashBar" class="h-full bg-gradient-to-r from-amber-400 to-pink-500 w-full transition-all duration-75"></div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1.5 bg-slate-800/80 px-2 py-1 rounded-lg border border-cyan-400/40">
+                    <span class="text-cyan-400 text-xs font-black" id="power2Label">💥 PODER 2 [G]:</span>
+                    <div class="w-12 sm:w-16 h-2.5 sm:h-3.5 bg-slate-950 rounded-full overflow-hidden border border-cyan-400/30">
+                        <div id="power2Bar" class="h-full bg-gradient-to-r from-cyan-400 to-blue-500 w-full transition-all duration-75"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Overlays de Menús -->
+        <div id="overlay" class="absolute inset-0 bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-center text-white p-3 sm:p-5 text-center z-20 overflow-y-auto">
+            <h1 id="overlayTitle" class="text-2xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-pink-500 mb-1 tracking-wider drop-shadow-md">URBAN STREET RUNNER</h1>
+            <p id="overlaySubtitle" class="text-xs text-gray-300 mb-3 max-w-lg leading-relaxed">
+                ¡Elige entre 11 corredores cyber-urbanos únicos y supera los 5 niveles derrotando a los jefes!
+            </p>
+
+            <!-- Selección de Personajes (Todos los 11 Personajes) -->
+            <div id="characterSelection" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 sm:gap-3 mb-4 w-full max-w-5xl max-h-[55vh] overflow-y-auto p-2">
+                <div class="char-card selected p-2 rounded-xl cursor-pointer flex flex-col items-center border-amber-400/50" data-char="blonde">
+                    <div class="text-2xl sm:text-3xl mb-0.5">👱‍♂️</div>
+                    <div class="text-[11px] font-black text-amber-300">RUBIO FACHERO</div>
+                    <div class="text-[9px] text-amber-400 font-bold">⚡ Láser Cyber</div>
+                    <div class="text-[9px] text-cyan-300 font-bold">💣 Granada</div>
+                </div>
+
+                <div class="char-card p-2 rounded-xl cursor-pointer flex flex-col items-center border-pink-400/50" data-char="cyberGirl">
+                    <div class="text-2xl sm:text-3xl mb-0.5">👩‍🎤</div>
+                    <div class="text-[11px] font-black text-pink-400">CYBER GIRL</div>
+                    <div class="text-[9px] text-pink-400 font-bold">🚀 Super Salto</div>
+                    <div class="text-[9px] text-cyan-300 font-bold">🚀 Misiles</div>
+                </div>
+
+                <div class="char-card p-2 rounded-xl cursor-pointer flex flex-col items-center border-emerald-400/50" data-char="skaterHoodie">
+                    <div class="text-2xl sm:text-3xl mb-0.5">🥷</div>
+                    <div class="text-[11px] font-black text-emerald-400">NINJA CYBER</div>
+                    <div class="text-[9px] text-emerald-400 font-bold">🥷 Teleport</div>
+                    <div class="text-[9px] text-cyan-300 font-bold">⚔️ Katana</div>
+                </div>
+
+                <div class="char-card p-2 rounded-xl cursor-pointer flex flex-col items-center border-purple-400/50" data-char="djNeon">
+                    <div class="text-2xl sm:text-3xl mb-0.5">🎧</div>
+                    <div class="text-[11px] font-black text-purple-400">DJ CYBER</div>
+                    <div class="text-[9px] text-purple-400 font-bold">🛡️ Escudo Sonic</div>
+                    <div class="text-[9px] text-cyan-300 font-bold">🔊 Bajo Neón</div>
+                </div>
+
+                <div class="char-card p-2 rounded-xl cursor-pointer flex flex-col items-center border-red-400/50" data-char="cyberCyborg">
+                    <div class="text-2xl sm:text-3xl mb-0.5">🤖</div>
+                    <div class="text-[11px] font-black text-red-400">RED CYBORG</div>
+                    <div class="text-[9px] text-red-400 font-bold">🔥 Lanzallamas</div>
+                    <div class="text-[9px] text-cyan-300 font-bold">⚡ Pulso EMP</div>
+                </div>
+
+                <div class="char-card p-2 rounded-xl cursor-pointer flex flex-col items-center border-yellow-400/50" data-char="neonValkyrie">
+                    <div class="text-2xl sm:text-3xl mb-0.5">👸</div>
+                    <div class="text-[11px] font-black text-yellow-300">VALKIRIA</div>
+                    <div class="text-[9px] text-yellow-400 font-bold">✨ Vuelo Divino</div>
+                    <div class="text-[9px] text-cyan-300 font-bold">🌟 Sol Neón</div>
+                </div>
+
+                <div class="char-card p-2 rounded-xl cursor-pointer flex flex-col items-center border-teal-400/50" data-char="cyberNeko">
+                    <div class="text-2xl sm:text-3xl mb-0.5">🐱</div>
+                    <div class="text-[11px] font-black text-teal-300">CYBER NEKO</div>
+                    <div class="text-[9px] text-teal-400 font-bold">🐾 Zarpazo Neón</div>
+                    <div class="text-[9px] text-cyan-300 font-bold">🔊 Maullido EMP</div>
+                </div>
+
+                <div class="char-card p-2 rounded-xl cursor-pointer flex flex-col items-center border-slate-400/50" data-char="shadowOperative">
+                    <div class="text-2xl sm:text-3xl mb-0.5">🕶️</div>
+                    <div class="text-[11px] font-black text-slate-300">SHADOW</div>
+                    <div class="text-[9px] text-slate-400 font-bold">💨 Sigilo Oscuro</div>
+                    <div class="text-[9px] text-cyan-300 font-bold">🗡️ Dagas Sombra</div>
+                </div>
+
+                <div class="char-card p-2 rounded-xl cursor-pointer flex flex-col items-center border-blue-400/50" data-char="electroPunk">
+                    <div class="text-2xl sm:text-3xl mb-0.5">⚡</div>
+                    <div class="text-[11px] font-black text-blue-300">ELECTRO PUNK</div>
+                    <div class="text-[9px] text-blue-400 font-bold">⚡ Voltaje Spark</div>
+                    <div class="text-[9px] text-cyan-300 font-bold">🔋 Torre Tesla</div>
+                </div>
+
+                <div class="char-card p-2 rounded-xl cursor-pointer flex flex-col items-center border-orange-400/50" data-char="mechGoliath">
+                    <div class="text-2xl sm:text-3xl mb-0.5">🦿</div>
+                    <div class="text-[11px] font-black text-orange-300">GOLIATH MECH</div>
+                    <div class="text-[9px] text-orange-400 font-bold">🛡️ Escudo Titán</div>
+                    <div class="text-[9px] text-cyan-300 font-bold">🚀 Salva Cohetes</div>
+                </div>
+
+                <div class="char-card p-2 rounded-xl cursor-pointer flex flex-col items-center border-indigo-400/50" data-char="arcaneCyber">
+                    <div class="text-2xl sm:text-3xl mb-0.5">🔮</div>
+                    <div class="text-[11px] font-black text-indigo-300">ARCANE CYBER</div>
+                    <div class="text-[9px] text-indigo-400 font-bold">⏳ Control Tiempo</div>
+                    <div class="text-[9px] text-cyan-300 font-bold">🌀 Vórtice Místico</div>
+                </div>
+            </div>
+
+            <button id="startBtn" class="px-8 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 active:scale-95 text-white font-black text-base sm:text-lg rounded-2xl shadow-xl border-b-4 border-blue-800 transition duration-150">
+                ¡EMPEZAR JUEGO!
+            </button>
+        </div>
+    </div>
+
+    <!-- Controles Táctiles -->
+    <div id="mobileControls" class="w-full h-32 bg-slate-950 border-t-2 border-slate-800 p-3 flex justify-between items-center z-20 shrink-0">
+        <div class="flex gap-2 ml-1">
+            <button id="btnLeft" class="touch-btn w-12 h-12 sm:w-14 sm:h-14 text-xl sm:text-2xl">◀</button>
+            <button id="btnRight" class="touch-btn w-12 h-12 sm:w-14 sm:h-14 text-xl sm:text-2xl">▶</button>
+        </div>
+
+        <div class="flex gap-2 mr-1 items-center">
+            <button id="btnDash" class="touch-btn dash-btn w-12 h-12 sm:w-14 sm:h-14 text-[10px] sm:text-xs font-black">PODER 1<br>(F)</button>
+            <button id="btnPower2" class="touch-btn dash-btn w-12 h-12 sm:w-14 sm:h-14 text-[10px] sm:text-xs font-black !from-cyan-500 !to-blue-600 !border-cyan-300">PODER 2<br>(G)</button>
+            <button id="btnJump" class="touch-btn action-btn w-14 h-14 sm:w-16 sm:h-16 text-xs sm:text-base font-black tracking-wider">SALTAR</button>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // CONFIGURACIÓN Y VARIABLES GLOBALES
+        // ==========================================
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        ctx.imageSmoothingEnabled = false;
+
+        const GAME_WIDTH = 800;
+        const GAME_HEIGHT = 450;
+        canvas.width = GAME_WIDTH;
+        canvas.height = GAME_HEIGHT;
+
+        const hudEl = document.getElementById('hud');
+        const levelDisplayEl = document.getElementById('levelDisplay');
+        const heartsContainer = document.getElementById('heartsContainer');
+        const livesTextEl = document.getElementById('livesText');
+        const bossHpContainer = document.getElementById('bossHpContainer');
+        const bossNameLabel = document.getElementById('bossNameLabel');
+        const bossHpBar = document.getElementById('bossHpBar');
+        const dashBarEl = document.getElementById('dashBar');
+        const power2BarEl = document.getElementById('power2Bar');
+        const missingLivesText = document.getElementById('missingLivesText');
+        const powerLabel = document.getElementById('powerLabel');
+        const power2Label = document.getElementById('power2Label');
+        const overlay = document.getElementById('overlay');
+        const overlayTitle = document.getElementById('overlayTitle');
+        const overlaySubtitle = document.getElementById('overlaySubtitle');
+        const startBtn = document.getElementById('startBtn');
+        const characterSelection = document.getElementById('characterSelection');
+
+        const btnLeft = document.getElementById('btnLeft');
+        const btnRight = document.getElementById('btnRight');
+        const btnJump = document.getElementById('btnJump');
+        const btnDash = document.getElementById('btnDash');
+        const btnPower2 = document.getElementById('btnPower2');
+
+        let gameState = 'START'; 
+        let selectedCharacter = 'blonde';
+        let currentLevel = 1;
+        const totalLevels = 5;
+        let lives = 3;
+        const maxLives = 5;
+        let score = 0;
+        let cameraX = 0;
+
+        let playerProjectiles = [];
+        let bossProjectiles = [];
+        let meteors = [];
+        let levelElements = [];
+        let collectibles = [];
+        let bananas = [];
+        let enemies = [];
+        let currentBoss = null;
+        let flag = null;
+
+        // Audio Sintetizado
+        const audio = {
+            ctx: null,
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            },
+            playTone(freq, type, duration) {
+                if (!this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch(e) {}
+            },
+            jump() { this.playTone(400, 'square', 0.15); },
+            dash() { this.playTone(600, 'sawtooth', 0.1); },
+            laser() { this.playTone(800, 'sine', 0.2); },
+            slash() { this.playTone(250, 'triangle', 0.12); },
+            hit() { this.playTone(150, 'sawtooth', 0.25); },
+            explosion() { this.playTone(80, 'square', 0.35); },
+            coin() { this.playTone(900, 'sine', 0.1); }
+        };
+
+        // Sistema de Partículas
+        const particleSystem = {
+            particles: [],
+            addSparks(x, y, color, count = 8, speedScale = 1) {
+                for (let i = 0; i < count; i++) {
+                    this.particles.push({
+                        x, y,
+                        vx: (Math.random() - 0.5) * 6 * speedScale,
+                        vy: (Math.random() - 0.5) * 6 * speedScale,
+                        size: Math.random() * 4 + 2,
+                        color,
+                        life: 20
+                    });
+                }
+            },
+            addFlame(x, y, dir) {
+                for (let i = 0; i < 4; i++) {
+                    const colors = ['#ef4444', '#f97316', '#fde047', '#ffffff'];
+                    this.particles.push({
+                        x: x + (Math.random() * 10 - 5),
+                        y: y + (Math.random() * 10 - 5),
+                        vx: dir * (Math.random() * 7 + 4),
+                        vy: (Math.random() - 0.5) * 4,
+                        size: Math.random() * 8 + 4,
+                        color: colors[Math.floor(Math.random() * colors.length)],
+                        life: Math.random() * 12 + 8
+                    });
+                }
+            },
+            addDust(x, y) {
+                for (let i = 0; i < 4; i++) {
+                    this.particles.push({
+                        x, y,
+                        vx: (Math.random() - 0.5) * 2,
+                        vy: -Math.random() * 2,
+                        size: Math.random() * 3 + 1,
+                        color: '#64748b',
+                        life: 15
+                    });
+                }
+            },
+            update() {
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const p = this.particles[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.life--;
+                    if (p.life <= 0) this.particles.splice(i, 1);
+                }
+            },
+            draw(cameraX) {
+                this.particles.forEach(p => {
+                    ctx.fillStyle = p.color;
+                    ctx.fillRect(p.x - cameraX, p.y, p.size, p.size);
+                });
+            }
+        };
+
+        document.querySelectorAll('.char-card').forEach(card => {
+            card.addEventListener('click', () => {
+                document.querySelectorAll('.char-card').forEach(c => c.classList.remove('selected'));
+                card.classList.add('selected');
+                selectedCharacter = card.dataset.char;
+                if (audio) audio.playTone(600, 'sine', 0.08);
+            });
+        });
+
+        const keys = { left: false, right: false, jump: false, dash: false, power2: false };
+
+        function setupTouchBtn(btnEl, keyName) {
+            if (!btnEl) return;
+            const startPress = (e) => {
+                e.preventDefault();
+                keys[keyName] = true;
+                btnEl.classList.add('active');
+            };
+            const endPress = (e) => {
+                e.preventDefault();
+                keys[keyName] = false;
+                btnEl.classList.remove('active');
+            };
+            btnEl.addEventListener('touchstart', startPress, { passive: false });
+            btnEl.addEventListener('touchend', endPress, { passive: false });
+            btnEl.addEventListener('mousedown', startPress);
+            btnEl.addEventListener('mouseup', endPress);
+            btnEl.addEventListener('mouseleave', endPress);
+        }
+
+        // ==========================================
+        // Clases del Juego
+        // ==========================================
+        class Platform {
+            constructor(x, y, w, h, style = 'urban', motion = null) {
+                this.x = x;
+                this.y = y;
+                this.startX = x;
+                this.startY = y;
+                this.w = w;
+                this.h = h;
+                this.style = style;
+                this.isSolid = true;
+                this.vx = 0;
+                this.vy = 0;
+                this.motion = motion;
+                this.timer = 0;
+            }
+
+            update() {
+                if (this.motion) {
+                    this.timer += 0.05 * (this.motion.speed || 1);
+                    if (this.motion.moveAxis === 'H') {
+                        const nextX = this.startX + Math.sin(this.timer) * this.motion.range;
+                        this.vx = nextX - this.x;
+                        this.x = nextX;
+                    } else if (this.motion.moveAxis === 'V') {
+                        const nextY = this.startY + Math.sin(this.timer) * this.motion.range;
+                        this.vy = nextY - this.y;
+                        this.y = nextY;
+                    }
+                }
+            }
+
+            draw(cameraX) {
+                ctx.save();
+                const renderX = this.x - cameraX;
+                if (this.style === 'urban') {
+                    ctx.fillStyle = '#0f172a';
+                    ctx.fillRect(renderX, this.y, this.w, this.h);
+                    ctx.fillStyle = '#38bdf8';
+                    ctx.fillRect(renderX, this.y, this.w, 4);
+                    ctx.fillStyle = '#0284c7';
+                    for (let lx = renderX + 10; lx < renderX + this.w - 10; lx += 40) {
+                        ctx.fillRect(lx, this.y + 8, 12, 3);
+                    }
+                } else {
+                    ctx.fillStyle = '#1e1b4b';
+                    ctx.fillRect(renderX, this.y, this.w, this.h);
+                    ctx.fillStyle = '#ec4899';
+                    ctx.fillRect(renderX, this.y, this.w, 4);
+                    ctx.fillStyle = '#f43f5e';
+                    for (let lx = renderX + 10; lx < renderX + this.w - 10; lx += 30) {
+                        ctx.fillRect(lx, this.y + this.h - 6, 8, 3);
+                    }
+                }
+                ctx.restore();
+            }
+        }
+
+        class CollectibleStar {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.w = 22;
+                this.h = 22;
+                this.collected = false;
+                this.animTimer = 0;
+            }
+
+            draw(cameraX) {
+                if (this.collected) return;
+                this.animTimer += 0.1;
+                const hoverY = this.y + Math.sin(this.animTimer) * 3;
+                const rx = this.x - cameraX;
+
+                ctx.save();
+                ctx.fillStyle = '#fde047';
+                ctx.fillRect(rx + 6, hoverY + 6, 10, 10);
+                ctx.fillRect(rx + 9, hoverY + 1, 4, 5);
+                ctx.fillRect(rx + 9, hoverY + 16, 4, 5);
+                ctx.fillRect(rx + 1, hoverY + 9, 5, 4);
+                ctx.fillRect(rx + 16, hoverY + 9, 5, 4);
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(rx + 8, hoverY + 8, 4, 4);
+                ctx.restore();
+            }
+        }
+
+        class CollectibleBanana {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.w = 22;
+                this.h = 22;
+                this.collected = false;
+                this.animTimer = Math.random() * 5;
+            }
+
+            draw(cameraX) {
+                if (this.collected) return;
+                this.animTimer += 0.08;
+                const hoverY = this.y + Math.cos(this.animTimer) * 3;
+                const rx = this.x - cameraX;
+
+                ctx.save();
+                ctx.fillStyle = '#eab308';
+                ctx.fillRect(rx + 4, hoverY + 12, 14, 5);
+                ctx.fillRect(rx + 2, hoverY + 8, 5, 6);
+                ctx.fillRect(rx + 15, hoverY + 6, 5, 7);
+                ctx.fillStyle = '#15803d';
+                ctx.fillRect(rx + 17, hoverY + 3, 3, 4);
+                ctx.fillStyle = '#fef08a';
+                ctx.fillRect(rx + 6, hoverY + 10, 8, 2);
+                ctx.restore();
+            }
+        }
+
+        class TrafficLightObstacle {
+            constructor(x, y, height = 90, speedMultiplier = 1.0) {
+                this.x = x;
+                this.y = y - height;
+                this.w = 26;
+                this.h = height;
+                this.state = 'GREEN';
+                this.timer = Math.random() * 2;
+                this.speedMultiplier = speedMultiplier;
+            }
+
+            update() {
+                this.timer += 0.02 * this.speedMultiplier;
+                const cycle = Math.floor(this.timer) % 3;
+                if (cycle === 0) this.state = 'GREEN';
+                else if (cycle === 1) this.state = 'YELLOW';
+                else this.state = 'RED';
+            }
+
+            draw(cameraX) {
+                const rx = this.x - cameraX;
+                ctx.save();
+                
+                ctx.fillStyle = '#334155';
+                ctx.fillRect(rx + 10, this.y + 50, 6, this.h - 50);
+                ctx.fillStyle = '#64748b';
+                ctx.fillRect(rx + 10, this.y + 50, 2, this.h - 50);
+
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(rx, this.y, 26, 52);
+                ctx.strokeStyle = '#f59e0b';
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(rx, this.y, 26, 52);
+
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(rx + 3, this.y + 4, 20, 12);
+                ctx.fillRect(rx + 3, this.y + 20, 20, 12);
+                ctx.fillRect(rx + 3, this.y + 36, 20, 12);
+
+                ctx.fillStyle = this.state === 'RED' ? '#ef4444' : '#450a0a';
+                ctx.fillRect(rx + 7, this.y + 6, 12, 8);
+                if (this.state === 'RED') {
+                    ctx.fillStyle = '#fca5a5';
+                    ctx.fillRect(rx + 9, this.y + 8, 4, 4);
+                }
+
+                ctx.fillStyle = this.state === 'YELLOW' ? '#eab308' : '#422006';
+                ctx.fillRect(rx + 7, this.y + 22, 12, 8);
+                if (this.state === 'YELLOW') {
+                    ctx.fillStyle = '#fef08a';
+                    ctx.fillRect(rx + 9, this.y + 24, 4, 4);
+                }
+
+                ctx.fillStyle = this.state === 'GREEN' ? '#22c55e' : '#052e16';
+                ctx.fillRect(rx + 7, this.y + 38, 12, 8);
+                if (this.state === 'GREEN') {
+                    ctx.fillStyle = '#86efac';
+                    ctx.fillRect(rx + 9, this.y + 40, 4, 4);
+                }
+
+                ctx.restore();
+            }
+        }
+
+        class JumpBarrierObstacle {
+            constructor(x, y, height = 35) {
+                this.x = x;
+                this.y = y - height;
+                this.w = 20;
+                this.h = height;
+            }
+
+            draw(cameraX) {
+                const rx = this.x - cameraX;
+                ctx.save();
+                ctx.fillStyle = '#475569';
+                ctx.fillRect(rx + 2, this.y, 4, this.h);
+                ctx.fillRect(rx + 14, this.y, 4, this.h);
+                ctx.fillStyle = '#f59e0b';
+                ctx.fillRect(rx, this.y, this.w, 14);
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(rx + 4, this.y + 2, 4, 10);
+                ctx.fillRect(rx + 12, this.y + 2, 4, 10);
+                ctx.restore();
+            }
+        }
+
+        class DogEnemy {
+            constructor(x, y, range = 100, speed = 3) {
+                this.x = x;
+                this.y = y;
+                this.startX = x;
+                this.w = 40;
+                this.h = 28;
+                this.range = range;
+                this.speed = speed;
+                this.dir = 1;
+                this.alive = true;
+                this.animTimer = 0;
+            }
+
+            update() {
+                if (!this.alive) return;
+                this.x += this.speed * this.dir;
+                this.animTimer += 0.25;
+                if (Math.abs(this.x - this.startX) > this.range) {
+                    this.dir *= -1;
+                }
+            }
+
+            draw(cameraX) {
+                if (!this.alive) return;
+                const rx = this.x - cameraX;
+                ctx.save();
+
+                ctx.translate(rx + this.w / 2, this.y + this.h / 2);
+                if (this.dir === -1) ctx.scale(-1, 1);
+
+                const legCycle = Math.sin(this.animTimer) * 6;
+
+                ctx.fillStyle = '#78350f';
+                ctx.fillRect(-14, -6, 22, 14);
+                ctx.fillStyle = '#451a03';
+                ctx.fillRect(-8, -4, 8, 8);
+
+                ctx.fillStyle = '#451a03';
+                ctx.fillRect(-12 + legCycle, 8, 4, 8);
+                ctx.fillRect(-4 - legCycle, 8, 4, 8);
+                ctx.fillRect(2 + legCycle, 8, 4, 8);
+                ctx.fillRect(10 - legCycle, 8, 4, 8);
+
+                ctx.fillStyle = '#78350f';
+                ctx.fillRect(-20, -10, 8, 4);
+
+                ctx.fillStyle = '#92400e';
+                ctx.fillRect(6, -14, 14, 14);
+
+                ctx.fillStyle = '#451a03';
+                ctx.fillRect(6, -18, 4, 5);
+                ctx.fillRect(12, -18, 4, 5);
+
+                ctx.fillStyle = '#78350f';
+                ctx.fillRect(16, -8, 8, 8);
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(18, -2, 6, 4);
+                ctx.fillRect(22, 0, 3, 4);
+
+                ctx.fillStyle = '#ef4444';
+                ctx.fillRect(12, -11, 4, 4);
+                ctx.fillStyle = '#fde047';
+                ctx.fillRect(14, -10, 2, 2);
+
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(18, -4, 2, 3);
+                ctx.fillRect(22, -4, 2, 3);
+
+                ctx.restore();
+            }
+        }
+
+        class BirdEnemy {
+            constructor(x, y, range = 180, speed = 2.5) {
+                this.x = x;
+                this.y = y;
+                this.startY = y;
+                this.startX = x;
+                this.w = 32;
+                this.h = 24;
+                this.range = range;
+                this.speed = speed;
+                this.dir = 1;
+                this.alive = true;
+                this.animTimer = Math.random() * 10;
+            }
+
+            update() {
+                if (!this.alive) return;
+                this.x += this.speed * this.dir;
+                this.animTimer += 0.2;
+                this.y = this.startY + Math.sin(this.animTimer) * 12;
+                if (Math.abs(this.x - this.startX) > this.range) {
+                    this.dir *= -1;
+                }
+            }
+
+            draw(cameraX) {
+                if (!this.alive) return;
+                const rx = this.x - cameraX;
+                ctx.save();
+
+                ctx.translate(rx + this.w / 2, this.y + this.h / 2);
+                if (this.dir === -1) ctx.scale(-1, 1);
+
+                const wingCycle = Math.sin(this.animTimer * 2) * 8;
+
+                ctx.fillStyle = '#0284c7';
+                ctx.fillRect(-10, -4, 18, 8);
+                ctx.fillStyle = '#38bdf8';
+                ctx.fillRect(8, -6, 6, 6);
+                ctx.fillStyle = '#f59e0b';
+                ctx.fillRect(14, -4, 5, 3);
+                ctx.fillStyle = '#ef4444';
+                ctx.fillRect(10, -5, 2, 2);
+                ctx.fillStyle = '#06b6d4';
+                ctx.beginPath();
+                ctx.moveTo(-4, -2);
+                ctx.lineTo(2, -14 + wingCycle);
+                ctx.lineTo(8, -2);
+                ctx.fill();
+
+                ctx.restore();
+            }
+        }
+
+        class Boss {
+            constructor(x, y, level) {
+                this.x = x;
+                this.y = y;
+                this.startX = x;
+                this.w = 70;
+                this.h = 80;
+                this.maxHp = 12 + level * 8;
+                this.hp = this.maxHp;
+                this.alive = true;
+                this.level = level;
+                this.timer = 0;
+                this.attackCooldown = 0;
+                this.maxAttackCooldown = Math.max(45, 110 - level * 15);
+                this.vx = 0;
+                this.vy = 0;
+            }
+
+            takeDamage(amount) {
+                this.hp -= amount;
+                audio.hit();
+                if (this.hp <= 0) {
+                    this.hp = 0;
+                    this.alive = false;
+                    audio.explosion();
+                }
+            }
+
+            update() {
+                if (!this.alive) return;
+                this.timer += 0.05;
+
+                const distToPlayer = player.x - this.x;
+                if (Math.abs(distToPlayer) < 550) {
+                    this.vx = distToPlayer > 0 ? 1.5 + this.level * 0.4 : -1.5 - this.level * 0.4;
+                } else {
+                    this.vx = 0;
+                }
+
+                this.x += this.vx;
+
+                if (this.x < this.startX - 300) this.x = this.startX - 300;
+                if (this.x > this.startX + 200) this.x = this.startX + 200;
+
+                this.attackCooldown++;
+                if (this.attackCooldown >= this.maxAttackCooldown) {
+                    this.attackCooldown = 0;
+                    audio.laser();
+
+                    const dir = player.x < this.x ? -1 : 1;
+                    bossProjectiles.push({
+                        x: this.x + (dir === 1 ? this.w : 0),
+                        y: this.y + 35,
+                        vx: dir * (5 + this.level * 0.8),
+                        vy: (player.y - this.y) * 0.02,
+                        w: 16,
+                        h: 16,
+                        color: '#ef4444'
+                    });
+                }
+            }
+
+            draw(cameraX) {
+                if (!this.alive) return;
+                const rx = this.x - cameraX;
+                ctx.save();
+
+                ctx.fillStyle = '#312e81';
+                ctx.fillRect(rx, this.y, this.w, this.h);
+                ctx.fillStyle = '#4338ca';
+                ctx.fillRect(rx + 6, this.y + 6, this.w - 12, this.h - 12);
+
+                ctx.fillStyle = '#ef4444';
+                ctx.fillRect(rx - 6, this.y + 10, 12, 20);
+                ctx.fillRect(rx + this.w - 6, this.y + 10, 12, 20);
+
+                ctx.fillStyle = '#1e1b4b';
+                ctx.fillRect(rx + 10, this.y + 16, 50, 18);
+                ctx.fillStyle = '#dc2626';
+                ctx.fillRect(rx + 14, this.y + 20, 42, 10);
+                ctx.fillStyle = '#fde047';
+                ctx.fillRect(rx + 20 + Math.sin(this.timer * 4) * 15, this.y + 22, 8, 6);
+
+                ctx.fillStyle = '#06b6d4';
+                ctx.beginPath();
+                ctx.arc(rx + this.w / 2, this.y + 54, 12, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#a5f3fc';
+                ctx.beginPath();
+                ctx.arc(rx + this.w / 2, this.y + 54, 6, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            }
+        }
+
+        class Flag {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.w = 36;
+                this.h = 170;
+                this.wave = 0;
+            }
+
+            draw(cameraX) {
+                const rx = this.x - cameraX;
+                this.wave += 0.1;
+                const waveOffset = Math.sin(this.wave) * 4;
+
+                ctx.save();
+                ctx.fillStyle = '#94a3b8';
+                ctx.fillRect(rx, this.y, 8, this.h);
+                ctx.fillStyle = '#cbd5e1';
+                ctx.fillRect(rx + 2, this.y, 3, this.h);
+
+                ctx.fillStyle = '#10b981';
+                ctx.fillRect(rx + 8, this.y + 10 + waveOffset, 42, 28);
+                ctx.fillStyle = '#a7f3d0';
+                ctx.fillRect(rx + 12, this.y + 14 + waveOffset, 34, 20);
+                ctx.fillStyle = '#047857';
+                ctx.font = '900 10px monospace';
+                ctx.fillText('FIN', rx + 18, this.y + 28 + waveOffset);
+                ctx.restore();
+            }
+        }
+
+        // ==========================================
+        // CLASE PRINCIPAL DEL JUGADOR
+        // ==========================================
+        class Player {
+            constructor() {
+                this.x = 80;
+                this.y = 300;
+                this.width = 34;
+                this.height = 48;
+                this.vx = 0;
+                this.vy = 0;
+                this.speed = 4.8;
+                this.jumpStrength = -14.2;
+                this.gravity = 0.65;
+                this.grounded = false;
+                this.facing = 'right';
+                this.invulnerable = 0;
+                this.dashCooldown = 0;
+                this.maxDashCooldown = 120;
+                this.power2Cooldown = 0;
+                this.maxPower2Cooldown = 180;
+                this.isDashing = 0;
+                this.laserTimer = 0;
+                this.slashTimer = 0;
+                this.flamethrowerTimer = 0;
+                this.sunBurstTimer = 0;
+                
+                this.timeStopTimer = 0;
+                this.vortexTimer = 0;
+                this.barrierTimer = 0;
+                this.teslaTimer = 0;
+
+                this.isDead = false;
+                this.deathRotation = 0;
+                
+                this.attachedPlatform = null;
+                this.animTimer = 0;
+            }
+
+            reset(x = 80, y = 300) {
+                this.x = x;
+                this.y = y;
+                this.vx = 0;
+                this.vy = 0;
+                this.grounded = false;
+                this.invulnerable = 0;
+                this.dashCooldown = 0;
+                this.power2Cooldown = 0;
+                this.isDashing = 0;
+                this.laserTimer = 0;
+                this.slashTimer = 0;
+                this.flamethrowerTimer = 0;
+                this.sunBurstTimer = 0;
+                this.timeStopTimer = 0;
+                this.vortexTimer = 0;
+                this.barrierTimer = 0;
+                this.teslaTimer = 0;
+                this.isDead = false;
+                this.deathRotation = 0;
+                this.attachedPlatform = null;
+            }
+
+            update(platforms) {
+                if (this.isDead) {
+                    this.vy += this.gravity;
+                    this.y += this.vy;
+                    if (this.deathRotation < Math.PI / 2) {
+                        this.deathRotation += 0.1;
+                    }
+                    return;
+                }
+
+                if (this.invulnerable > 0) this.invulnerable--;
+                if (this.dashCooldown > 0) this.dashCooldown--;
+                if (this.power2Cooldown > 0) this.power2Cooldown--;
+                if (this.isDashing > 0) this.isDashing--;
+                if (this.laserTimer > 0) this.laserTimer--;
+                if (this.slashTimer > 0) this.slashTimer--;
+                if (this.flamethrowerTimer > 0) this.flamethrowerTimer--;
+                if (this.sunBurstTimer > 0) this.sunBurstTimer--;
+                
+                if (this.timeStopTimer > 0) this.timeStopTimer--;
+                if (this.vortexTimer > 0) this.vortexTimer--;
+                if (this.barrierTimer > 0) this.barrierTimer--;
+                if (this.teslaTimer > 0) this.teslaTimer--;
+
+                this.animTimer += 0.2;
+
+                this.vx = 0;
+                if (keys.left) {
+                    this.vx = -this.speed;
+                    this.facing = 'left';
+                }
+                if (keys.right) {
+                    this.vx = this.speed;
+                    this.facing = 'right';
+                }
+
+                if (keys.dash && this.dashCooldown === 0) {
+                    this.triggerDash();
+                }
+
+                if (keys.power2 && this.power2Cooldown === 0) {
+                    this.triggerPower2();
+                }
+
+                if (keys.jump && this.grounded) {
+                    this.vy = this.jumpStrength;
+                    this.grounded = false;
+                    this.attachedPlatform = null;
+                    audio.jump();
+                    particleSystem.addDust(this.x + this.width / 2, this.y + this.height);
+                }
+
+                if (this.attachedPlatform) {
+                    this.x += this.attachedPlatform.vx;
+                    this.y += this.attachedPlatform.vy;
+                }
+
+                this.vy += this.gravity;
+                this.x += this.vx;
+
+                this.grounded = false;
+
+                platforms.forEach(p => {
+                    if (!p.isSolid) return;
+
+                    if (this.x < p.x + p.w &&
+                        this.x + this.width > p.x &&
+                        this.y + this.height <= p.y + 12 &&
+                        this.y + this.height + this.vy >= p.y) {
+                        
+                        this.y = p.y - this.height;
+                        this.vy = 0;
+                        this.grounded = true;
+                        this.attachedPlatform = p;
+                    }
+                });
+
+                if (!this.grounded) {
+                    this.y += this.vy;
+                }
+
+                if (this.y > GAME_HEIGHT + 100) {
+                    takeDamage(true);
+                }
+
+                if (this.vortexTimer > 0) {
+                    const vx = this.x + this.width / 2;
+                    const vy = this.y + this.height / 2;
+                    enemies.forEach(e => {
+                        if (e.alive) {
+                            const dx = vx - e.x;
+                            const dy = vy - e.y;
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            if (dist < 320) {
+                                e.x += (dx / dist) * 6;
+                                if (dist < 50) e.alive = false;
+                            }
+                        }
+                    });
+                }
+
+                if (this.flamethrowerTimer > 0) {
+                    const dir = this.facing === 'right' ? 1 : -1;
+                    const flameX = this.facing === 'right' ? this.x + this.width : this.x;
+                    particleSystem.addFlame(flameX, this.y + 20, dir);
+
+                    const flameBox = {
+                        x: this.facing === 'right' ? this.x + this.width : this.x - 220,
+                        y: this.y,
+                        w: 220,
+                        h: 40
+                    };
+
+                    enemies.forEach(e => {
+                        if (e.alive && e.x < flameBox.x + flameBox.w && e.x + e.w > flameBox.x && e.y < flameBox.y + flameBox.h && e.y + e.h > flameBox.y) {
+                            e.alive = false;
+                            particleSystem.addSparks(e.x + 16, e.y + 12, '#f97316');
+                        }
+                    });
+
+                    if (currentBoss && currentBoss.alive) {
+                        if (currentBoss.x < flameBox.x + flameBox.w && currentBoss.x + currentBoss.w > flameBox.x && currentBoss.y < flameBox.y + flameBox.h && currentBoss.y + currentBoss.h > flameBox.y) {
+                            currentBoss.takeDamage(0.15);
+                        }
+                    }
+                }
+            }
+
+            triggerDash() {
+                if (this.dashCooldown === 0 && this.isDashing === 0) {
+                    this.dashCooldown = this.maxDashCooldown;
+
+                    if (selectedCharacter === 'blonde') {
+                        this.laserTimer = 18;
+                        audio.laser();
+
+                        const rayX = this.facing === 'right' ? this.x + this.width : this.x - 300;
+                        const rayWidth = 300;
+                        const rayY = this.y + 12;
+                        const rayHeight = 20;
+
+                        enemies.forEach(e => {
+                            if (e.alive && e.x < rayX + rayWidth && e.x + e.w > rayX && e.y < rayY + rayHeight && e.y + e.h > rayY) {
+                                e.alive = false;
+                                particleSystem.addSparks(e.x + 16, e.y + 12, '#fde047');
+                            }
+                        });
+
+                        if (currentBoss && currentBoss.alive) {
+                            if (currentBoss.x < rayX + rayWidth && currentBoss.x + currentBoss.w > rayX && currentBoss.y < rayY + rayHeight && currentBoss.y + currentBoss.h > rayY) {
+                                currentBoss.takeDamage(2);
+                            }
+                        }
+
+                        for (let i = 0; i < 15; i++) {
+                            particleSystem.addSparks(
+                                this.facing === 'right' ? this.x + this.width + (Math.random() * 250) : this.x - (Math.random() * 250),
+                                rayY + (Math.random() * 16 - 8),
+                                '#38bdf8'
+                            );
+                        }
+                    } else if (selectedCharacter === 'cyberGirl') {
+                        this.vy = -19;
+                        this.grounded = false;
+                        this.attachedPlatform = null;
+                        this.isDashing = 12;
+                        audio.jump();
+                        particleSystem.addSparks(this.x + this.width / 2, this.y + this.height, '#ec4899');
+                    } else if (selectedCharacter === 'skaterHoodie') {
+                        const tpDistance = 150;
+                        particleSystem.addSparks(this.x + this.width / 2, this.y + this.height / 2, '#10b981');
+                        this.x += this.facing === 'right' ? tpDistance : -tpDistance;
+                        particleSystem.addSparks(this.x + this.width / 2, this.y + this.height / 2, '#10b981');
+                        audio.dash();
+                    } else if (selectedCharacter === 'djNeon') {
+                        this.invulnerable = 90;
+                        this.isDashing = 20;
+                        audio.hit();
+                        enemies.forEach(e => {
+                            if (e.alive && Math.abs(e.x - this.x) < 200 && Math.abs(e.y - this.y) < 140) {
+                                e.alive = false;
+                            }
+                        });
+                    } else if (selectedCharacter === 'cyberCyborg') {
+                        this.flamethrowerTimer = 35;
+                        audio.dash();
+                    } else if (selectedCharacter === 'neonValkyrie') {
+                        this.vy = -12;
+                        this.isDashing = 30;
+                        audio.jump();
+                        particleSystem.addSparks(this.x + this.width / 2, this.y + this.height / 2, '#fde047', 12, 1.5);
+                    } else if (selectedCharacter === 'cyberNeko') {
+                        this.slashTimer = 15;
+                        audio.slash();
+                        const clawX = this.facing === 'right' ? this.x + this.width : this.x - 120;
+                        enemies.forEach(e => {
+                            if (e.alive && Math.abs(e.x - clawX) < 120) e.alive = false;
+                        });
+                    } else if (selectedCharacter === 'shadowOperative') {
+                        this.invulnerable = 120;
+                        audio.dash();
+                        particleSystem.addDust(this.x + this.width / 2, this.y + this.height / 2);
+                    } else if (selectedCharacter === 'electroPunk') {
+                        this.teslaTimer = 30;
+                        audio.laser();
+                        particleSystem.addSparks(this.x + this.width / 2, this.y + this.height / 2, '#38bdf8', 20, 2);
+                        enemies.forEach(e => {
+                            if (e.alive && Math.abs(e.x - this.x) < 250) e.alive = false;
+                        });
+                    } else if (selectedCharacter === 'mechGoliath') {
+                        this.invulnerable = 140;
+                        this.barrierTimer = 140;
+                        audio.hit();
+                        particleSystem.addSparks(this.x + this.width / 2, this.y + this.height / 2, '#f97316', 15);
+                    } else if (selectedCharacter === 'arcaneCyber') {
+                        this.timeStopTimer = 100;
+                        audio.jump();
+                        particleSystem.addSparks(this.x + this.width / 2, this.y + this.height / 2, '#a855f7', 25);
+                    }
+                }
+            }
+
+            triggerPower2() {
+                this.power2Cooldown = this.maxPower2Cooldown;
+
+                if (selectedCharacter === 'blonde') {
+                    audio.dash();
+                    const dir = this.facing === 'right' ? 1 : -1;
+                    playerProjectiles.push({
+                        type: 'grenade',
+                        x: this.x + this.width / 2,
+                        y: this.y,
+                        vx: dir * 7,
+                        vy: -6,
+                        radius: 8,
+                        timer: 45
+                    });
+
+                } else if (selectedCharacter === 'cyberGirl') {
+                    audio.laser();
+                    const dir = this.facing === 'right' ? 1 : -1;
+                    for (let i = -1; i <= 1; i++) {
+                        playerProjectiles.push({
+                            type: 'missile',
+                            x: this.x + this.width / 2,
+                            y: this.y + 10,
+                            vx: dir * 9,
+                            vy: i * 2,
+                            w: 14,
+                            h: 6,
+                            life: 60
+                        });
+                    }
+
+                } else if (selectedCharacter === 'skaterHoodie') {
+                    this.slashTimer = 15;
+                    audio.slash();
+                    const slashWidth = 100;
+                    const slashX = this.facing === 'right' ? this.x + this.width : this.x - slashWidth;
+
+                    enemies.forEach(e => {
+                        if (e.alive && e.x < slashX + slashWidth && e.x + e.w > slashX && e.y < this.y + this.height && e.y + e.h > this.y) {
+                            e.alive = false;
+                            particleSystem.addSparks(e.x + 16, e.y + 12, '#10b981');
+                        }
+                    });
+
+                    if (currentBoss && currentBoss.alive) {
+                        if (currentBoss.x < slashX + slashWidth && currentBoss.x + currentBoss.w > slashX && currentBoss.y < this.y + this.height && currentBoss.y + currentBoss.h > this.y) {
+                            currentBoss.takeDamage(4);
+                        }
+                    }
+
+                } else if (selectedCharacter === 'djNeon') {
+                    audio.explosion();
+                    particleSystem.addSparks(this.x + this.width / 2, this.y + this.height / 2, '#a855f7', 15, 2);
+                    enemies.forEach(e => {
+                        if (e.alive && Math.abs(e.x - this.x) < 180) {
+                            e.alive = false;
+                        }
+                    });
+                } else if (selectedCharacter === 'cyberCyborg') {
+                    audio.explosion();
+                    particleSystem.addSparks(this.x + this.width / 2, this.y + this.height / 2, '#38bdf8', 25, 2.5);
+                    enemies.forEach(e => {
+                        if (e.alive && Math.abs(e.x - this.x) < 220) {
+                            e.alive = false;
+                        }
+                    });
+                    if (currentBoss && currentBoss.alive && Math.abs(currentBoss.x - this.x) < 250) {
+                        currentBoss.takeDamage(3.5);
+                    }
+                } else if (selectedCharacter === 'neonValkyrie') {
+                    this.sunBurstTimer = 20;
+                    audio.explosion();
+                    particleSystem.addSparks(this.x + this.width / 2, this.y + this.height / 2, '#fde047', 30, 3);
+                    enemies.forEach(e => {
+                        if (e.alive && Math.abs(e.x - this.x) < 250 && Math.abs(e.y - this.y) < 180) {
+                            e.alive = false;
+                        }
+                    });
+                    if (currentBoss && currentBoss.alive && Math.abs(currentBoss.x - this.x) < 260) {
+                        currentBoss.takeDamage(4);
+                    }
+                } else if (selectedCharacter === 'cyberNeko') {
+                    audio.explosion();
+                    particleSystem.addSparks(this.x + this.width / 2, this.y + this.height / 2, '#14b8a6', 20);
+                    enemies.forEach(e => {
+                        if (e.alive && Math.abs(e.x - this.x) < 200) e.alive = false;
+                    });
+                } else if (selectedCharacter === 'shadowOperative') {
+                    audio.slash();
+                    const dir = this.facing === 'right' ? 1 : -1;
+                    playerProjectiles.push({ 
+                        type: 'missile', 
+                        x: this.x + (dir === 1 ? this.width : -14), 
+                        y: this.y + 30, 
+                        vx: dir * 12, 
+                        vy: 0, 
+                        w: 14, 
+                        h: 8, 
+                        life: 50 
+                    });
+                } else if (selectedCharacter === 'electroPunk') {
+                    audio.explosion();
+                    particleSystem.addSparks(this.x + this.width / 2, this.y + this.height / 2, '#60a5fa', 30, 3);
+                    enemies.forEach(e => {
+                        if (e.alive && Math.abs(e.x - this.x) < 230) e.alive = false;
+                    });
+                } else if (selectedCharacter === 'mechGoliath') {
+                    audio.laser();
+                    const dir = this.facing === 'right' ? 1 : -1;
+                    for (let i = -3; i <= 3; i++) {
+                        playerProjectiles.push({ 
+                            type: 'rocket', 
+                            x: this.x + this.width / 2, 
+                            y: this.y - 10, 
+                            vx: dir * (8 + Math.abs(i)), 
+                            vy: i * 2.5, 
+                            w: 22, 
+                            h: 10, 
+                            life: 60 
+                        });
+                    }
+                } else if (selectedCharacter === 'arcaneCyber') {
+                    this.vortexTimer = 80;
+                    audio.explosion();
+                    particleSystem.addSparks(this.x + this.width / 2, this.y + this.height / 2, '#a855f7', 40, 4);
+                    if (currentBoss && currentBoss.alive) currentBoss.takeDamage(6);
+                }
+            }
+
+            draw(cameraX) {
+                if (this.invulnerable % 4 >= 2) return;
+
+                ctx.save();
+                ctx.translate(this.x - cameraX + this.width / 2, this.y + this.height / 2);
+                
+                if (this.isDead) {
+                    ctx.rotate(this.facing === 'right' ? this.deathRotation : -this.deathRotation);
+                }
+
+                if (this.facing === 'left') ctx.scale(-1, 1);
+
+                const legAnim = Math.sin(this.animTimer) * 7;
+                const armAnim = Math.cos(this.animTimer) * 6;
+
+                if (selectedCharacter === 'blonde') {
+                    // 👱‍♂️ RUBIO FACHERO CON IDENTIDAD Y SWAG
+                    // Zapatillas facheras
+                    ctx.fillStyle = '#f87171';
+                    ctx.fillRect(-11 + (this.vx ? legAnim : 0), 18, 9, 6);
+                    ctx.fillRect(2 - (this.vx ? legAnim : 0), 18, 9, 6);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(-11 + (this.vx ? legAnim : 0), 22, 9, 2);
+                    ctx.fillRect(2 - (this.vx ? legAnim : 0), 22, 9, 2);
+
+                    // Jeans rasgados
+                    ctx.fillStyle = '#2563eb';
+                    ctx.fillRect(-9, 4, 7, 15);
+                    ctx.fillRect(2, 4, 7, 15);
+                    ctx.fillStyle = '#93c5fd'; // Detalles rasgados
+                    ctx.fillRect(-8, 10, 5, 2);
+                    ctx.fillRect(3, 14, 5, 2);
+
+                    // Chaqueta de cuero fachera con cuello alzado
+                    ctx.fillStyle = '#0f172a';
+                    ctx.fillRect(-12, -12, 24, 17);
+                    ctx.fillStyle = '#38bdf8'; // Remera neón interna
+                    ctx.fillRect(-5, -10, 10, 15);
+                    ctx.fillStyle = '#f59e0b'; // Cierre dorado
+                    ctx.fillRect(-6, -12, 2, 17);
+
+                    // Cabeza, piel y barba estilizada
+                    ctx.fillStyle = '#fde047'; // Rubio
+                    ctx.fillRect(-9, -23, 18, 12);
+                    ctx.fillStyle = '#fed7aa'; // Piel
+                    ctx.fillRect(-8, -21, 16, 12);
+
+                    // Anteojos de sol oscuros súper facheros
+                    ctx.fillStyle = '#020617';
+                    ctx.fillRect(-3, -18, 11, 5);
+                    ctx.fillStyle = '#38bdf8'; // Reflejo neón en los lentes
+                    ctx.fillRect(4, -17, 3, 2);
+
+                    // Jopo/Copete Rubio Fachero con volumen
+                    ctx.fillStyle = '#fef08a';
+                    ctx.fillRect(-10, -28, 20, 7);
+                    ctx.fillRect(-6, -31, 16, 4);
+                    ctx.fillRect(2, -33, 9, 3);
+
+                    // Cadena de oro / Collar fachero
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.fillRect(-4, -9, 8, 2);
+
+                } else if (selectedCharacter === 'neonValkyrie') {
+                    // 👸 VALKIRIA NÓRDICA NEÓN
+                    const capeWave = Math.sin(this.animTimer * 1.5) * 5;
+
+                    // Capa divinal de energía dorada/celeste
+                    ctx.fillStyle = '#eab308';
+                    ctx.beginPath();
+                    ctx.moveTo(-10, -12);
+                    ctx.lineTo(-20 - capeWave, 20);
+                    ctx.lineTo(-6, 18);
+                    ctx.fill();
+                    ctx.fillStyle = '#fef08a';
+                    ctx.fillRect(-18 - capeWave, 6, 8, 12);
+
+                    // Botas altas doradas
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.fillRect(-9 + (this.vx ? legAnim : 0), 12, 7, 12);
+                    ctx.fillRect(2 - (this.vx ? legAnim : 0), 12, 7, 12);
+
+                    // Armadura mística / Pechera real
+                    ctx.fillStyle = '#f8fafc';
+                    ctx.fillRect(-9, -10, 18, 22);
+                    ctx.fillStyle = '#38bdf8'; // Gemas cibernéticas
+                    ctx.fillRect(-3, -6, 6, 6);
+                    ctx.fillStyle = '#fde047';
+                    ctx.fillRect(-8, -10, 16, 3);
+
+                    // Rostro y cabello rubio largo
+                    ctx.fillStyle = '#fed7aa';
+                    ctx.fillRect(-7, -22, 14, 12);
+                    ctx.fillStyle = '#fde047'; // Pelo fluído
+                    ctx.fillRect(-12, -22, 5, 24);
+
+                    // CASCO DE VALKIRIA CON ALAS ICÓNICAS
+                    ctx.fillStyle = '#e2e8f0';
+                    ctx.fillRect(-8, -26, 16, 6);
+                    // Ala Izquierda
+                    ctx.fillStyle = '#fef08a';
+                    ctx.beginPath();
+                    ctx.moveTo(-8, -24);
+                    ctx.lineTo(-18, -34);
+                    ctx.lineTo(-8, -28);
+                    ctx.fill();
+                    // Ala Derecha
+                    ctx.beginPath();
+                    ctx.moveTo(8, -24);
+                    ctx.lineTo(18, -34);
+                    ctx.lineTo(8, -28);
+                    ctx.fill();
+
+                    // Lanza Divina en la mano
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.fillRect(10, -25, 3, 45);
+                    ctx.fillStyle = '#38bdf8'; // Punta reluciente
+                    ctx.beginPath();
+                    ctx.moveTo(11, -35);
+                    ctx.lineTo(7, -25);
+                    ctx.lineTo(15, -25);
+                    ctx.fill();
+
+                } else if (selectedCharacter === 'cyberCyborg') {
+                    // 🤖 RED CYBORG PENSADO - MÁQUINA DE GUERRA
+                    // Piernas mecánicas pesadas con servomotores
+                    ctx.fillStyle = '#334155';
+                    ctx.fillRect(-11 + (this.vx ? legAnim : 0), 10, 8, 14);
+                    ctx.fillRect(3 - (this.vx ? legAnim : 0), 10, 8, 14);
+                    ctx.fillStyle = '#ef4444'; // Luces de articulaciones
+                    ctx.fillRect(-10 + (this.vx ? legAnim : 0), 14, 6, 2);
+                    ctx.fillRect(4 - (this.vx ? legAnim : 0), 14, 6, 2);
+
+                    // Torso acorazado con Placa Blindada pesada
+                    ctx.fillStyle = '#1e293b';
+                    ctx.fillRect(-14, -14, 28, 24);
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.fillRect(-10, -12, 20, 20);
+
+                    // Reactor Cyber Central en el pecho (Glow Rojo)
+                    ctx.fillStyle = '#ef4444';
+                    ctx.fillRect(-4, -6, 8, 8);
+                    ctx.fillStyle = '#fca5a5';
+                    ctx.fillRect(-2, -4, 4, 4);
+
+                    // Cabeza metálica con placas Cyber
+                    ctx.fillStyle = '#475569';
+                    ctx.fillRect(-8, -24, 16, 11);
+                    ctx.fillStyle = '#0f172a'; // Placa facial
+                    ctx.fillRect(-6, -20, 12, 7);
+
+                    // Visor/Ojo cibernético Láser Rojo brillante
+                    ctx.fillStyle = '#dc2626';
+                    ctx.fillRect(-2, -19, 10, 3);
+                    ctx.fillStyle = '#fef08a';
+                    ctx.fillRect(4, -19, 3, 3);
+
+                    // CAÑÓN PESADO REEMPLAZANDO EL BRAZO DERECHO
+                    ctx.fillStyle = '#0f172a';
+                    ctx.fillRect(8, -8, 14, 10);
+                    ctx.fillStyle = '#ef4444';
+                    ctx.fillRect(20, -7, 4, 8);
+
+                } else if (selectedCharacter === 'cyberNeko') {
+                    // 🐱 CYBER NEKO FELINO
+                    // Patas con almohadillas robóticas
+                    ctx.fillStyle = '#0f172a';
+                    ctx.fillRect(-9 + (this.vx ? legAnim : 0), 14, 7, 10);
+                    ctx.fillRect(2 - (this.vx ? legAnim : 0), 14, 7, 10);
+                    ctx.fillStyle = '#2dd4bf';
+                    ctx.fillRect(-8 + (this.vx ? legAnim : 0), 22, 5, 2);
+                    ctx.fillRect(3 - (this.vx ? legAnim : 0), 22, 5, 2);
+
+                    // Traje ajustado cibernético con detalles neón
+                    ctx.fillStyle = '#111827';
+                    ctx.fillRect(-9, -10, 18, 24);
+                    ctx.fillStyle = '#0d9488';
+                    ctx.fillRect(-6, -8, 12, 20);
+
+                    // Cola metálica articulada ondulando
+                    const tailWave = Math.sin(this.animTimer * 2) * 6;
+                    ctx.fillStyle = '#2dd4bf';
+                    ctx.fillRect(-14, 4 + tailWave, 6, 4);
+                    ctx.fillRect(-18, -2 + tailWave, 5, 8);
+                    ctx.fillRect(-22, -8 + tailWave, 5, 8);
+
+                    // Cabeza Felina Cyber
+                    ctx.fillStyle = '#14b8a6';
+                    ctx.fillRect(-8, -22, 16, 12);
+
+                    // OREJAS DE GATO NEÓN EN PUNTA
+                    ctx.fillStyle = '#0f172a';
+                    ctx.beginPath();
+                    ctx.moveTo(-9, -22);
+                    ctx.lineTo(-5, -31);
+                    ctx.lineTo(-1, -22);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(1, -22);
+                    ctx.lineTo(5, -31);
+                    ctx.lineTo(9, -22);
+                    ctx.fill();
+                    // Interior Neón de las orejas
+                    ctx.fillStyle = '#2dd4bf';
+                    ctx.fillRect(-6, -28, 3, 5);
+                    ctx.fillRect(4, -28, 3, 5);
+
+                    // Visor de Ojos Felinos en Forma de "V" o "A"
+                    ctx.fillStyle = '#22d3ee';
+                    ctx.fillRect(-4, -18, 11, 4);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(2, -17, 3, 2);
+
+                    // Bigotes neón luminosos
+                    ctx.fillStyle = '#a5f3fc';
+                    ctx.fillRect(7, -15, 6, 1);
+                    ctx.fillRect(7, -12, 6, 1);
+
+                    // Garras retraídas brillantes
+                    ctx.fillStyle = '#2dd4bf';
+                    ctx.fillRect(8 + armAnim, -2, 4, 3);
+
+                } else if (selectedCharacter === 'shadowOperative') {
+                    // 🕶️ SHADOW OPERATIVE - AGENTE DE LAS SOMBRAS
+                    const shadowCape = Math.sin(this.animTimer) * 4;
+
+                    // Capa/Gabardina táctica de sigilo flameando con humo oscuro
+                    ctx.fillStyle = '#020617';
+                    ctx.beginPath();
+                    ctx.moveTo(-10, -12);
+                    ctx.lineTo(-22 - shadowCape, 22);
+                    ctx.lineTo(-4, 20);
+                    ctx.fill();
+
+                    // Traje táctico de combate stealth
+                    ctx.fillStyle = '#1e293b';
+                    ctx.fillRect(-9, -10, 18, 28);
+                    ctx.fillStyle = '#334155';
+                    ctx.fillRect(-6, -8, 12, 14);
+
+                    // Cabeza con capucha táctica oscura
+                    ctx.fillStyle = '#020617';
+                    ctx.fillRect(-9, -24, 18, 14);
+
+                    // VISOR TÁCTICO ROJO DE VISIÓN NOCTURNA
+                    ctx.fillStyle = '#dc2626';
+                    ctx.fillRect(-3, -19, 11, 4);
+                    ctx.fillStyle = '#fca5a5';
+                    ctx.fillRect(3, -18, 3, 2);
+
+                    // Dagas de Sombra en ambas manos
+                    ctx.fillStyle = '#64748b';
+                    ctx.fillRect(8, -8, 2, 16);
+                    ctx.fillStyle = '#38bdf8'; // Filo de energía
+                    ctx.fillRect(9, -12, 2, 18);
+
+                } else if (selectedCharacter === 'cyberGirl') {
+                    // 👩‍🎤 CYBER GIRL POP-PUNK
+                    ctx.fillStyle = '#ec4899';
+                    ctx.fillRect(-9 + (this.vx ? legAnim : 0), 18, 7, 6);
+                    ctx.fillRect(2 - (this.vx ? legAnim : 0), 18, 7, 6);
+                    ctx.fillStyle = '#0284c7';
+                    ctx.fillRect(-8, -6, 16, 24);
+                    ctx.fillStyle = '#38bdf8';
+                    ctx.fillRect(-6, -4, 12, 12);
+                    ctx.fillStyle = '#fed7aa';
+                    ctx.fillRect(-7, -20, 14, 14);
+                    ctx.fillStyle = '#06b6d4';
+                    ctx.fillRect(-2, -17, 10, 5);
+                    ctx.fillStyle = '#a5f3fc';
+                    ctx.fillRect(2, -16, 4, 2);
+                    ctx.fillStyle = '#f43f5e'; // Cabello Cyber Punk Rosado
+                    ctx.fillRect(-11, -25, 22, 6);
+                    ctx.fillRect(-13, -20, 6, 22);
+
+                } else if (selectedCharacter === 'skaterHoodie') {
+                    // 🥷 NINJA SKATER CYBER
+                    ctx.fillStyle = '#022c22';
+                    ctx.fillRect(-9 + (this.vx ? legAnim : 0), 18, 7, 6);
+                    ctx.fillRect(2 - (this.vx ? legAnim : 0), 18, 7, 6);
+                    ctx.fillStyle = '#065f46';
+                    ctx.fillRect(-9, -8, 18, 26);
+                    ctx.fillStyle = '#10b981';
+                    ctx.fillRect(-7, -6, 14, 12);
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.fillRect(-13, -18, 4, 24); // Katana a la espalda
+                    ctx.fillStyle = '#f59e0b';
+                    ctx.fillRect(-14, 0, 6, 4);
+                    ctx.fillStyle = '#022c22';
+                    ctx.fillRect(-9, -22, 18, 15);
+                    ctx.fillStyle = '#10b981';
+                    ctx.fillRect(-14, -10, 8, 5);
+                    ctx.fillStyle = '#fed7aa';
+                    ctx.fillRect(-2, -18, 9, 4);
+                    ctx.fillStyle = '#000000';
+                    ctx.fillRect(2, -17, 3, 2);
+
+                } else if (selectedCharacter === 'djNeon') {
+                    // 🎧 DJ CYBER CON AUDÍFONOS NEÓN
+                    ctx.fillStyle = '#581c87';
+                    ctx.fillRect(-9, -10, 18, 28);
+                    ctx.fillStyle = '#c084fc';
+                    ctx.fillRect(-6, -6, 12, 18);
+                    ctx.fillStyle = '#fed7aa';
+                    ctx.fillRect(-7, -22, 14, 12);
+                    // Audífonos Neón Gigantes
+                    ctx.fillStyle = '#a855f7';
+                    ctx.fillRect(-10, -20, 4, 10);
+                    ctx.fillRect(6, -20, 4, 10);
+                    ctx.fillRect(-10, -24, 20, 4);
+
+                } else if (selectedCharacter === 'electroPunk') {
+                    // ⚡ ELECTRO PUNK
+                    ctx.fillStyle = '#1e3a8a';
+                    ctx.fillRect(-9, -10, 18, 28);
+                    ctx.fillStyle = '#3b82f6';
+                    ctx.fillRect(-6, -6, 12, 18);
+                    ctx.fillStyle = '#fed7aa';
+                    ctx.fillRect(-7, -22, 14, 12);
+                    // Cresta Mohawk Neón
+                    ctx.fillStyle = '#60a5fa';
+                    ctx.fillRect(-2, -30, 5, 10);
+
+                } else if (selectedCharacter === 'mechGoliath') {
+                    // 🦿 GOLIATH MECH TITÁN
+                    ctx.fillStyle = '#ea580c';
+                    ctx.fillRect(-14, -14, 28, 32);
+                    ctx.fillStyle = '#7c2d12';
+                    ctx.fillRect(-10, 16, 8, 10);
+                    ctx.fillRect(2, 16, 8, 10);
+                    ctx.fillStyle = '#fb923c';
+                    ctx.fillRect(-18, -12, 6, 16);
+                    ctx.fillRect(12, -12, 6, 16);
+                    ctx.fillStyle = '#0f172a';
+                    ctx.fillRect(-8, -24, 16, 10);
+                    ctx.fillStyle = '#f97316';
+                    ctx.fillRect(-4, -20, 10, 3);
+
+                } else if (selectedCharacter === 'arcaneCyber') {
+                    // 🔮 ARCANE CYBER MÍSTICO
+                    ctx.fillStyle = '#312e81';
+                    ctx.fillRect(-12, -12, 24, 30);
+                    ctx.fillStyle = '#6366f1';
+                    ctx.fillRect(-8, -8, 16, 22);
+                    ctx.fillStyle = '#a855f7';
+                    ctx.fillRect(-6, -24, 12, 14);
+                    ctx.fillStyle = '#c084fc';
+                    ctx.fillRect(0, -20, 5, 4);
+                    ctx.fillStyle = '#f0abfc';
+                    ctx.beginPath();
+                    ctx.arc(10, -2, 6, 0, Math.PI * 2);
+                    ctx.fill();
+
+                } else {
+                    ctx.fillStyle = '#0d9488';
+                    ctx.fillRect(-9, -10, 18, 28);
+                    ctx.fillStyle = '#2dd4bf';
+                    ctx.fillRect(-7, -22, 14, 12);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(1, -18, 4, 3);
+                }
+
+                ctx.restore();
+
+                // EFECTO VISUAL 1: Barrera Mech Goliath
+                if (this.barrierTimer > 0) {
+                    ctx.save();
+                    const rx = this.x - cameraX + this.width / 2;
+                    const ry = this.y + this.height / 2;
+                    ctx.strokeStyle = '#f97316';
+                    ctx.lineWidth = 4;
+                    ctx.fillStyle = 'rgba(249, 115, 22, 0.25)';
+                    ctx.beginPath();
+                    ctx.arc(rx, ry, 45, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                // EFECTO VISUAL 2: Control del Tiempo Arcane
+                if (this.timeStopTimer > 0) {
+                    ctx.save();
+                    const rx = this.x - cameraX + this.width / 2;
+                    const ry = this.y - 30;
+                    ctx.strokeStyle = '#c084fc';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(rx, ry, 26, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.fillStyle = 'rgba(192, 132, 252, 0.2)';
+                    ctx.fill();
+
+                    const timeAngle = this.timeStopTimer * 0.2;
+                    ctx.beginPath();
+                    ctx.moveTo(rx, ry);
+                    ctx.lineTo(rx + Math.cos(timeAngle) * 16, ry + Math.sin(timeAngle) * 16);
+                    ctx.moveTo(rx, ry);
+                    ctx.lineTo(rx + Math.cos(timeAngle * 0.5) * 10, ry + Math.sin(timeAngle * 0.5) * 10);
+                    ctx.stroke();
+
+                    ctx.fillStyle = '#f0abfc';
+                    ctx.font = '900 12px monospace';
+                    ctx.fillText('⏳ TIME STOP', rx - 35, ry - 32);
+                    ctx.restore();
+                }
+
+                // EFECTO VISUAL 3: Vórtice Oscuro Arcane
+                if (this.vortexTimer > 0) {
+                    ctx.save();
+                    const rx = this.x - cameraX + this.width / 2;
+                    const ry = this.y + this.height / 2;
+                    
+                    for (let r = 10; r < 120; r += 20) {
+                        ctx.strokeStyle = r % 40 === 0 ? '#a855f7' : '#c084fc';
+                        ctx.lineWidth = 3;
+                        ctx.beginPath();
+                        ctx.arc(rx, ry, r, this.vortexTimer * 0.1, this.vortexTimer * 0.1 + Math.PI * 1.5);
+                        ctx.stroke();
+                    }
+                    ctx.restore();
+                }
+
+                if (this.slashTimer > 0 && (selectedCharacter === 'skaterHoodie' || selectedCharacter === 'cyberNeko')) {
+                    ctx.save();
+                    const slashStartX = this.facing === 'right' ? this.x + this.width - cameraX : this.x - 100 - cameraX;
+                    ctx.fillStyle = selectedCharacter === 'cyberNeko' ? '#2dd4bf' : '#34d399';
+                    ctx.beginPath();
+                    ctx.arc(slashStartX + 50, this.y + 20, 45, -Math.PI / 4, Math.PI / 4);
+                    ctx.fill();
+                    ctx.restore();
+                }
+
+                if (this.laserTimer > 0 && selectedCharacter === 'blonde') {
+                    ctx.save();
+                    const rayStartX = this.facing === 'right' ? this.x + this.width - cameraX : this.x - 300 - cameraX;
+                    ctx.fillStyle = '#06b6d4';
+                    ctx.fillRect(rayStartX, this.y + 12, 300, 12);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(rayStartX, this.y + 15, 300, 6);
+                    ctx.restore();
+                }
+
+                if (this.sunBurstTimer > 0 && selectedCharacter === 'neonValkyrie') {
+                    ctx.save();
+                    const centerX = this.x + this.width / 2 - cameraX;
+                    const centerY = this.y + this.height / 2;
+                    
+                    const grad = ctx.createRadialGradient(centerX, centerY, 10, centerX, centerY, 180);
+                    grad.addColorStop(0, 'rgba(254, 224, 71, 0.9)');
+                    grad.addColorStop(0.5, 'rgba(249, 115, 22, 0.5)');
+                    grad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+
+                    ctx.fillStyle = grad;
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, 180, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.strokeStyle = '#fde047';
+                    ctx.lineWidth = 3;
+                    for (let a = 0; a < Math.PI * 2; a += Math.PI / 6) {
+                        ctx.beginPath();
+                        ctx.moveTo(centerX + Math.cos(a) * 20, centerY + Math.sin(a) * 20);
+                        ctx.lineTo(centerX + Math.cos(a) * 190, centerY + Math.sin(a) * 190);
+                        ctx.stroke();
+                    }
+                    ctx.restore();
+                }
+            }
+        }
+
+        const player = new Player();
+
+        // ==========================================
+        // CONSTRUCCIÓN DE NIVELES
+        // ==========================================
+        function buildLevel(levelNum) {
+            levelDisplayEl.textContent = `NIVEL ${levelNum}`;
+            levelElements = [];
+            collectibles = [];
+            bananas = [];
+            enemies = [];
+            bossProjectiles = [];
+            meteors = [];
+
+            const groundY = 380;
+
+            if (levelNum === 1) {
+                levelElements.push(new Platform(0, groundY, 1200, 70));
+                levelElements.push(new Platform(1380, groundY, 900, 70));
+                levelElements.push(new Platform(2400, groundY, 1600, 70));
+
+                levelElements.push(new Platform(400, 270, 130, 20));
+                levelElements.push(new Platform(800, 230, 140, 20, 'urban', { moveAxis: 'H', range: 120, speed: 2.5 }));
+                levelElements.push(new Platform(1600, 250, 140, 20, 'urban', { moveAxis: 'V', range: 60, speed: 2.2 }));
+                levelElements.push(new Platform(2100, 220, 150, 20));
+
+                collectibles.push(new CollectibleStar(420, 230));
+                collectibles.push(new CollectibleStar(830, 180));
+                bananas.push(new CollectibleBanana(1650, 200));
+
+                levelElements.push(new JumpBarrierObstacle(300, groundY, 35));
+                levelElements.push(new TrafficLightObstacle(650, groundY, 85, 2.8));
+                levelElements.push(new JumpBarrierObstacle(1500, groundY, 35));
+
+                enemies.push(new DogEnemy(850, groundY - 28, 120, 3.2));
+                enemies.push(new BirdEnemy(1100, 220, 150, 2.8));
+                enemies.push(new DogEnemy(1800, groundY - 28, 140, 3.5));
+                enemies.push(new BirdEnemy(2200, 200, 180, 3.2));
+
+                currentBoss = new Boss(3300, groundY - 80, 1);
+                flag = new Flag(3800, groundY - 170);
+
+            } else if (levelNum === 2) {
+                levelElements.push(new Platform(0, groundY, 1000, 70));
+                levelElements.push(new Platform(1200, groundY, 900, 70));
+                levelElements.push(new Platform(2300, groundY, 1700, 70));
+
+                levelElements.push(new Platform(350, 260, 110, 20));
+                levelElements.push(new Platform(700, 210, 110, 20, 'urban', { moveAxis: 'V', range: 80, speed: 3.5 }));
+                levelElements.push(new Platform(1400, 240, 130, 20, 'urban', { moveAxis: 'H', range: 150, speed: 4.0 }));
+
+                collectibles.push(new CollectibleStar(380, 220));
+                bananas.push(new CollectibleBanana(720, 140));
+
+                levelElements.push(new JumpBarrierObstacle(480, groundY, 38));
+                levelElements.push(new TrafficLightObstacle(850, groundY, 95, 3.8));
+                levelElements.push(new JumpBarrierObstacle(1650, groundY, 38));
+
+                enemies.push(new DogEnemy(750, groundY - 28, 140, 4.0));
+                enemies.push(new BirdEnemy(950, 200, 180, 3.5));
+                enemies.push(new DogEnemy(1800, groundY - 28, 160, 4.2));
+                enemies.push(new BirdEnemy(2500, 180, 200, 4.0));
+
+                currentBoss = new Boss(3200, groundY - 80, 2);
+                flag = new Flag(3700, groundY - 170);
+
+            } else if (levelNum === 3) {
+                levelElements.push(new Platform(0, groundY, 900, 70));
+                levelElements.push(new Platform(1100, groundY, 800, 70));
+                levelElements.push(new Platform(2100, groundY, 1800, 70));
+
+                levelElements.push(new Platform(300, 250, 100, 20));
+                levelElements.push(new Platform(600, 190, 100, 20, 'neon', { moveAxis: 'H', range: 160, speed: 4.8 }));
+                levelElements.push(new Platform(1300, 220, 110, 20, 'neon', { moveAxis: 'V', range: 90, speed: 4.5 }));
+
+                collectibles.push(new CollectibleStar(320, 210));
+                bananas.push(new CollectibleBanana(1350, 170));
+
+                levelElements.push(new JumpBarrierObstacle(400, groundY, 40));
+                levelElements.push(new TrafficLightObstacle(750, groundY, 105, 5.5));
+                levelElements.push(new JumpBarrierObstacle(1500, groundY, 40));
+
+                enemies.push(new DogEnemy(650, groundY - 28, 160, 6.0));
+                enemies.push(new BirdEnemy(800, 210, 200, 4.5));
+                enemies.push(new DogEnemy(1400, groundY - 28, 170, 6.5));
+                enemies.push(new BirdEnemy(1900, 170, 220, 5.0));
+                enemies.push(new DogEnemy(2400, groundY - 28, 180, 7.0));
+
+                currentBoss = new Boss(3300, groundY - 80, 3);
+                flag = new Flag(3800, groundY - 170);
+
+            } else if (levelNum === 4) {
+                levelElements.push(new Platform(0, groundY, 800, 70));
+                levelElements.push(new Platform(1000, groundY, 700, 70));
+                levelElements.push(new Platform(1900, groundY, 2000, 70));
+
+                levelElements.push(new Platform(280, 230, 90, 20, 'neon', { moveAxis: 'V', range: 110, speed: 5.2 }));
+                levelElements.push(new Platform(700, 190, 95, 20, 'neon', { moveAxis: 'H', range: 180, speed: 5.5 }));
+
+                collectibles.push(new CollectibleStar(300, 150));
+                bananas.push(new CollectibleBanana(1100, 210));
+
+                levelElements.push(new JumpBarrierObstacle(420, groundY, 42));
+                levelElements.push(new TrafficLightObstacle(850, groundY, 115, 6.5));
+                levelElements.push(new JumpBarrierObstacle(1400, groundY, 42));
+
+                enemies.push(new DogEnemy(500, groundY - 28, 180, 7.5));
+                enemies.push(new BirdEnemy(750, 190, 220, 5.5));
+                enemies.push(new DogEnemy(1500, groundY - 28, 190, 8.0));
+                enemies.push(new BirdEnemy(2100, 160, 240, 6.0));
+                enemies.push(new DogEnemy(2600, groundY - 28, 200, 8.5));
+
+                currentBoss = new Boss(3400, groundY - 80, 4);
+                flag = new Flag(3900, groundY - 170);
+
+            } else {
+                levelElements.push(new Platform(0, groundY, 700, 70));
+                levelElements.push(new Platform(900, groundY, 600, 70));
+                levelElements.push(new Platform(1700, groundY, 2200, 70));
+
+                levelElements.push(new Platform(220, 210, 85, 20, 'neon', { moveAxis: 'H', range: 190, speed: 6.8 }));
+                levelElements.push(new Platform(650, 170, 85, 20, 'neon', { moveAxis: 'V', range: 120, speed: 7.2 }));
+
+                collectibles.push(new CollectibleStar(240, 130));
+                bananas.push(new CollectibleBanana(950, 190));
+
+                levelElements.push(new JumpBarrierObstacle(380, groundY, 45));
+                levelElements.push(new TrafficLightObstacle(800, groundY, 125, 8.0));
+                levelElements.push(new JumpBarrierObstacle(1300, groundY, 45));
+
+                enemies.push(new DogEnemy(400, groundY - 28, 200, 9.0));
+                enemies.push(new BirdEnemy(600, 180, 250, 6.5));
+                enemies.push(new DogEnemy(1200, groundY - 28, 220, 9.5));
+                enemies.push(new BirdEnemy(1800, 150, 260, 7.0));
+                enemies.push(new DogEnemy(2300, groundY - 28, 230, 10.0));
+
+                currentBoss = new Boss(3300, groundY - 80, 5);
+                flag = new Flag(3850, groundY - 170);
+            }
+        }
+
+        // ==========================================
+        // BUCLE Y LÓGICA PRINCIPAL
+        // ==========================================
+        function updateProjectiles() {
+            if (currentLevel >= 4 && Math.random() < (currentLevel === 5 ? 0.08 : 0.04)) {
+                meteors.push({
+                    x: cameraX + Math.random() * GAME_WIDTH,
+                    y: -20,
+                    vx: (Math.random() - 0.5) * 4,
+                    vy: 7 + Math.random() * 4,
+                    size: 16
+                });
+            }
+
+            for (let i = meteors.length - 1; i >= 0; i--) {
+                const m = meteors[i];
+                m.x += m.vx;
+                m.y += m.vy;
+
+                particleSystem.addFlame(m.x, m.y, 0);
+
+                if (player.x < m.x + m.size && player.x + player.width > m.x &&
+                    player.y < m.y + m.size && player.y + player.height > m.y) {
+                    takeDamage();
+                    meteors.splice(i, 1);
+                    continue;
+                }
+
+                if (m.y > GAME_HEIGHT) {
+                    meteors.splice(i, 1);
+                }
+            }
+
+            for (let i = playerProjectiles.length - 1; i >= 0; i--) {
+                const proj = playerProjectiles[i];
+
+                if (proj.type === 'grenade') {
+                    proj.x += proj.vx;
+                    proj.y += proj.vy;
+                    proj.vy += 0.4;
+                    proj.timer--;
+
+                    if (proj.timer <= 0 || proj.y >= 380) {
+                        audio.explosion();
+                        particleSystem.addSparks(proj.x, proj.y, '#f97316', 20, 2);
+
+                        enemies.forEach(e => {
+                            if (e.alive && Math.abs(e.x - proj.x) < 90 && Math.abs(e.y - proj.y) < 90) {
+                                e.alive = false;
+                            }
+                        });
+
+                        if (currentBoss && currentBoss.alive && Math.abs(currentBoss.x - proj.x) < 110 && Math.abs(currentBoss.y - proj.y) < 110) {
+                            currentBoss.takeDamage(3);
+                        }
+
+                        playerProjectiles.splice(i, 1);
+                        continue;
+                    }
+
+                } else if (proj.type === 'missile' || proj.type === 'rocket') {
+                    proj.x += proj.vx;
+                    proj.y += proj.vy;
+                    proj.life--;
+
+                    particleSystem.addDust(proj.x, proj.y);
+
+                    enemies.forEach(e => {
+                        if (e.alive && e.x < proj.x + proj.w && e.x + e.w > proj.x && e.y < proj.y + proj.h && e.y + e.h > proj.y) {
+                            e.alive = false;
+                            particleSystem.addSparks(proj.x, proj.y, proj.type === 'rocket' ? '#f97316' : '#ec4899');
+                            proj.life = 0;
+                        }
+                    });
+
+                    if (currentBoss && currentBoss.alive && currentBoss.x < proj.x + proj.w && currentBoss.x + currentBoss.w > proj.x && currentBoss.y < proj.y + proj.h && currentBoss.y + currentBoss.h > proj.y) {
+                        currentBoss.takeDamage(proj.type === 'rocket' ? 2.5 : 1);
+                        particleSystem.addSparks(proj.x, proj.y, proj.type === 'rocket' ? '#f97316' : '#ec4899');
+                        proj.life = 0;
+                    }
+
+                    if (proj.life <= 0) {
+                        playerProjectiles.splice(i, 1);
+                    }
+                }
+            }
+
+            for (let i = bossProjectiles.length - 1; i >= 0; i--) {
+                const bp = bossProjectiles[i];
+                bp.x += bp.vx;
+                bp.y += bp.vy;
+
+                if (player.x < bp.x + bp.w && player.x + player.width > bp.x &&
+                    player.y < bp.y + bp.h && player.y + player.height > bp.y) {
+                    takeDamage();
+                    particleSystem.addSparks(bp.x, bp.y, '#ef4444', 10);
+                    bossProjectiles.splice(i, 1);
+                    continue;
+                }
+
+                if (bp.x < cameraX - 100 || bp.x > cameraX + GAME_WIDTH + 100) {
+                    bossProjectiles.splice(i, 1);
+                }
+            }
+        }
+
+        function drawProjectiles(cameraX) {
+            meteors.forEach(m => {
+                ctx.save();
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath();
+                ctx.arc(m.x - cameraX, m.y, m.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#fde047';
+                ctx.beginPath();
+                ctx.arc(m.x - cameraX, m.y, m.size * 0.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            });
+
+            playerProjectiles.forEach(p => {
+                ctx.save();
+                if (p.type === 'grenade') {
+                    ctx.fillStyle = '#f97316';
+                    ctx.beginPath();
+                    ctx.arc(p.x - cameraX, p.y, p.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (p.type === 'missile') {
+                    ctx.fillStyle = '#ec4899';
+                    ctx.fillRect(p.x - cameraX, p.y, p.w, p.h);
+                    ctx.fillStyle = '#fde047';
+                    ctx.fillRect(p.x - cameraX - 4, p.y + 1, 4, p.h - 2);
+                } else if (p.type === 'rocket') {
+                    ctx.fillStyle = '#f97316';
+                    ctx.fillRect(p.x - cameraX, p.y, p.w, p.h);
+                    ctx.fillStyle = '#fde047';
+                    ctx.fillRect(p.x - cameraX + 4, p.y + 2, p.w - 8, p.h - 4);
+                }
+                ctx.restore();
+            });
+
+            bossProjectiles.forEach(bp => {
+                ctx.save();
+                ctx.fillStyle = bp.color;
+                ctx.fillRect(bp.x - cameraX, bp.y, bp.w, bp.h);
+                ctx.fillStyle = '#fde047';
+                ctx.fillRect(bp.x - cameraX + 3, bp.y + 3, bp.w - 6, bp.h - 6);
+                ctx.restore();
+            });
+        }
+
+        function loop() {
+            if (gameState === 'PLAYING') {
+                player.update(levelElements);
+
+                cameraX = player.x - 200;
+                if (cameraX < 0) cameraX = 0;
+
+                levelElements.forEach(el => el.update && el.update());
+                enemies.forEach(e => e.update && e.update());
+                if (currentBoss) currentBoss.update();
+
+                updateProjectiles();
+                particleSystem.update();
+
+                collectibles.forEach(star => {
+                    if (!star.collected && player.x < star.x + star.w && player.x + player.width > star.x && player.y < star.y + star.h && player.y + player.height > star.y) {
+                        star.collected = true;
+                        score += 100;
+                        audio.coin();
+                    }
+                });
+
+                bananas.forEach(b => {
+                    if (!b.collected && player.x < b.x + b.w && player.x + player.width > b.x && player.y < b.y + b.h && player.y + player.height > b.y) {
+                        b.collected = true;
+                        if (lives < maxLives) lives++;
+                        updateHeartsUI();
+                        audio.coin();
+                    }
+                });
+
+                enemies.forEach(e => {
+                    if (e.alive && player.x < e.x + e.w && player.x + player.width > e.x && player.y < e.y + e.h && player.y + player.height > e.y) {
+                        takeDamage();
+                    }
+                });
+
+                levelElements.forEach(el => {
+                    if (el instanceof TrafficLightObstacle && el.state === 'RED') {
+                        if (player.x < el.x + el.w && player.x + player.width > el.x && player.y < el.y + el.h && player.y + player.height > el.y) {
+                            takeDamage();
+                        }
+                    }
+                    if (el instanceof JumpBarrierObstacle) {
+                        if (player.x < el.x + el.w && player.x + player.width > el.x && player.y < el.y + el.h && player.y + player.height > el.y) {
+                            takeDamage();
+                        }
+                    }
+                });
+
+                if (currentBoss && currentBoss.alive && player.x < currentBoss.x + currentBoss.w && player.x + player.width > currentBoss.x && player.y < currentBoss.y + currentBoss.h && player.y + player.height > currentBoss.y) {
+                    takeDamage();
+                }
+
+                if (flag && player.x < flag.x + flag.w && player.x + player.width > flag.x) {
+                    if (!currentBoss || !currentBoss.alive) {
+                        if (currentLevel < totalLevels) {
+                            gameState = 'LEVEL_WIN';
+                            showOverlay(`¡NIVEL ${currentLevel} SUPERADO!`, 'Has derrotado al jefe y completado la sección urbana.', 'SIGUIENTE NIVEL');
+                        } else {
+                            gameState = 'WIN';
+                            showOverlay('¡VICTORIA TOTAL!', '¡Has completado todos los niveles de Urban Street Runner!', 'JUGAR DE NUEVO');
+                        }
+                    }
+                }
+
+                dashBarEl.style.width = `${Math.max(0, 100 - (player.dashCooldown / player.maxDashCooldown) * 100)}%`;
+                power2BarEl.style.width = `${Math.max(0, 100 - (player.power2Cooldown / player.maxPower2Cooldown) * 100)}%`;
+
+                if (currentBoss && currentBoss.alive) {
+                    bossHpContainer.classList.remove('hidden');
+                    bossHpBar.style.width = `${(currentBoss.hp / currentBoss.maxHp) * 100}%`;
+                } else {
+                    bossHpContainer.classList.add('hidden');
+                }
+            }
+
+            drawBackground();
+
+            levelElements.forEach(el => el.draw(cameraX));
+            collectibles.forEach(s => s.draw(cameraX));
+            bananas.forEach(b => b.draw(cameraX));
+            enemies.forEach(e => e.draw(cameraX));
+            if (currentBoss) currentBoss.draw(cameraX);
+            if (flag) flag.draw(cameraX);
+
+            drawProjectiles(cameraX);
+            particleSystem.draw(cameraX);
+
+            player.draw(cameraX);
+
+            requestAnimationFrame(loop);
+        }
+
+        // ==========================================
+        // FUNCIONES DE APOYO / DIBUJO Y UI
+        // ==========================================
+        function drawBackground() {
+            ctx.fillStyle = '#020617';
+            ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+            ctx.fillStyle = '#1e1b4b';
+            ctx.beginPath();
+            ctx.arc(650 - (cameraX * 0.05) % 800, 90, 45, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#0f172a';
+            for (let i = 0; i < 15; i++) {
+                const bgX = (i * 120) - (cameraX * 0.2) % 120;
+                ctx.fillRect(bgX, 180 + (i % 3) * 20, 90, 270);
+                
+                ctx.fillStyle = '#1e293b';
+                for (let wy = 200; wy < 380; wy += 25) {
+                    for (let wx = bgX + 10; wx < bgX + 80; wx += 20) {
+                        if ((i + wy + wx) % 5 === 0) {
+                            ctx.fillStyle = '#38bdf8';
+                            ctx.fillRect(wx, wy, 8, 12);
+                            ctx.fillStyle = '#1e293b';
+                        }
+                    }
+                }
+                ctx.fillStyle = '#0f172a';
+            }
+        }
+
+        function updateHeartsUI() {
+            let heartsHtml = '';
+            for (let i = 0; i < maxLives; i++) {
+                if (i < lives) {
+                    heartsHtml += '❤️';
+                } else {
+                    heartsHtml += '🖤';
+                }
+            }
+            heartsContainer.innerHTML = heartsHtml;
+            livesTextEl.textContent = `(${lives}/${maxLives} VIDAS)`;
+            missingLivesText.textContent = `(Faltan: ${maxLives - lives})`;
+        }
+
+        function takeDamage(instantKill = false) {
+            if (player.invulnerable > 0 && !instantKill) return;
+
+            if (instantKill) {
+                lives = 0;
+            } else {
+                lives--;
+                player.invulnerable = 60;
+                audio.hit();
+                particleSystem.addSparks(player.x + player.width / 2, player.y + player.height / 2, '#ef4444', 15);
+            }
+
+            updateHeartsUI();
+
+            if (lives <= 0) {
+                player.isDead = true;
+                player.vy = -8;
+                audio.explosion();
+
+                setTimeout(() => {
+                    gameState = 'GAME_OVER';
+                    showOverlay('¡GAME OVER!', 'Has agotado todas tus vidas. ¡Elige un corredor y reinténtalo!', 'REINTENTAR');
+                }, 1000);
+            }
+        }
+
+        function showOverlay(title, subtitle, btnText) {
+            overlayTitle.textContent = title;
+            overlaySubtitle.textContent = subtitle;
+            startBtn.textContent = btnText;
+            
+            if (gameState === 'START' || gameState === 'GAME_OVER') {
+                characterSelection.classList.remove('hidden');
+            } else {
+                characterSelection.classList.add('hidden');
+            }
+            
+            overlay.classList.remove('hidden');
+        }
+
+        // ==========================================
+        // CONFIGURACIÓN Y PANTALLA
+        // ==========================================
+        function startGame() {
+            audio.init();
+
+            if (gameState === 'START' || gameState === 'GAME_OVER' || gameState === 'WIN') {
+                currentLevel = 1;
+                lives = 3;
+                score = 0;
+            } else if (gameState === 'LEVEL_WIN') {
+                currentLevel++;
+            }
+
+            playerProjectiles = [];
+            bossProjectiles = [];
+            updateHeartsUI();
+
+            if (selectedCharacter === 'blonde') {
+                powerLabel.textContent = '⚡ LÁSER [F]:';
+                power2Label.textContent = '💣 GRANADA [G]:';
+            } else if (selectedCharacter === 'cyberGirl') {
+                powerLabel.textContent = '🚀 SALTO [F]:';
+                power2Label.textContent = '🚀 MISILES [G]:';
+            } else if (selectedCharacter === 'skaterHoodie') {
+                powerLabel.textContent = '🥷 TELEPORT [F]:';
+                power2Label.textContent = '⚔️ KATANA [G]:';
+            } else if (selectedCharacter === 'djNeon') {
+                powerLabel.textContent = '🛡️ ESCUDO [F]:';
+                power2Label.textContent = '🔊 ONDA GRAVE [G]:';
+            } else if (selectedCharacter === 'cyberCyborg') {
+                powerLabel.textContent = '🔥 LANZALLAMAS [F]:';
+                power2Label.textContent = '⚡ ONDA EMP [G]:';
+            } else if (selectedCharacter === 'neonValkyrie') {
+                powerLabel.textContent = '✨ VUELO [F]:';
+                power2Label.textContent = '🌟 SOL NEÓN [G]:';
+            } else if (selectedCharacter === 'cyberNeko') {
+                powerLabel.textContent = '🐾 GARRAS [F]:';
+                power2Label.textContent = '🔊 MAULLIDO [G]:';
+            } else {
+                powerLabel.textContent = '⚡ PODER 1 [F]:';
+                power2Label.textContent = '💥 PODER 2 [G]:';
+            }
+
+            buildLevel(currentLevel);
+            player.reset(80, 250);
+
+            overlay.classList.add('hidden');
+            hudEl.classList.remove('hidden');
+            gameState = 'PLAYING';
+        }
+
+        window.addEventListener('keydown', e => {
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
+            if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'Space') keys.jump = true;
+            if (e.code === 'KeyF') keys.dash = true;
+            if (e.code === 'KeyG') keys.power2 = true;
+        });
+
+        window.addEventListener('keyup', e => {
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+            if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'Space') keys.jump = false;
+            if (e.code === 'KeyF') keys.dash = false;
+            if (e.code === 'KeyG') keys.power2 = false;
+        });
+
+        setupTouchBtn(btnLeft, 'left');
+        setupTouchBtn(btnRight, 'right');
+        setupTouchBtn(btnJump, 'jump');
+        setupTouchBtn(btnDash, 'dash');
+        setupTouchBtn(btnPower2, 'power2');
+
+        startBtn.addEventListener('click', startGame);
+
+        window.onload = () => {
+            audio.init();
+            selectedCharacter = 'blonde';
+            powerLabel.textContent = '⚡ LÁSER [F]:';
+            power2Label.textContent = '💣 GRANADA [G]:';
+            
+            buildLevel(1);
+            player.reset(80, 250);
+
+            showOverlay('URBAN STREET RUNNER', '¡Elige entre 11 corredores cyber-urbanos con identidades únicas y supera los 5 niveles!', '¡EMPEZAR JUEGO!');
+
+            loop();
+        };
+    </script>
+</body>
+</html>
