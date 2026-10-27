@@ -124,7 +124,7 @@
         <div id="overlay" class="absolute inset-0 bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-center text-white p-3 sm:p-5 text-center z-20 overflow-y-auto">
             <h1 id="overlayTitle" class="text-2xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-pink-500 mb-1 tracking-wider drop-shadow-md">URBAN STREET RUNNER</h1>
             <p id="overlaySubtitle" class="text-xs text-gray-300 mb-3 max-w-lg leading-relaxed">
-                ¡Elige entre 11 corredores cyber-urbanos únicos y supera los 5 niveles derrotando a los jefes!
+                ¡Elige entre 12 corredores cyber-urbanos únicos y supera los 5 niveles derrotando a los jefes!
             </p>
 
             <!-- Selección de Personajes (Todos los 11 Personajes) -->
@@ -205,8 +205,15 @@
                     <div class="text-[9px] text-indigo-400 font-bold">⏳ Control Tiempo</div>
                     <div class="text-[9px] text-cyan-300 font-bold">🌀 Vórtice Místico</div>
                 </div>
+                <div class="char-card p-2 rounded-xl cursor-pointer flex flex-col items-center border-sky-400/50" data-char="elLio">
+                    <div class="text-2xl sm:text-3xl mb-0.5">⚽</div>
+                    <div class="text-[11px] font-black text-sky-300">EL LIO 🇦🇷</div>
+                    <div class="text-[9px] text-sky-300 font-bold">⚽ Pelotazo</div>
+                    <div class="text-[9px] text-cyan-300 font-bold">👟 Barrida terrestre / aérea</div>
+                </div>
             </div>
 
+            <p class="text-xs text-sky-200 mb-2">Flechas / A-D: mover · Espacio: saltar · F / G: poderes.<br>¡Caé sobre los rivales para vencerlos! Cada impacto reduce la barra de vida del jefe.</p>
             <button id="startBtn" class="px-8 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 active:scale-95 text-white font-black text-base sm:text-lg rounded-2xl shadow-xl border-b-4 border-blue-800 transition duration-150">
                 ¡EMPEZAR JUEGO!
             </button>
@@ -459,6 +466,29 @@
                     for (let lx = renderX + 10; lx < renderX + this.w - 10; lx += 30) {
                         ctx.fillRect(lx, this.y + this.h - 6, 8, 3);
                     }
+                }
+                ctx.restore();
+            }
+        }
+
+        class ParkourWall extends Platform {
+            constructor(x, groundY, height) {
+                super(x, groundY - height, 50, height, 'urban');
+            }
+
+            draw(cameraX) {
+                super.draw(cameraX);
+                const x = this.x - cameraX;
+                ctx.save();
+                ctx.strokeStyle = '#64748b';
+                ctx.lineWidth = 2;
+                for (let row = 18; row < this.h; row += 18) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, this.y + row);
+                    ctx.lineTo(x + this.w, this.y + row);
+                    ctx.moveTo(x + (row % 36 ? 16 : 34), this.y + row - 18);
+                    ctx.lineTo(x + (row % 36 ? 16 : 34), this.y + row);
+                    ctx.stroke();
                 }
                 ctx.restore();
             }
@@ -744,6 +774,7 @@
                 this.w = 70;
                 this.h = 80;
                 this.maxHp = 12 + level * 8;
+                this.hitCooldown = 0;
                 this.hp = this.maxHp;
                 this.alive = true;
                 this.level = level;
@@ -755,7 +786,10 @@
             }
 
             takeDamage(amount) {
+                if (!this.alive) return;
+                // Cada impacto aplica su daño; el parpadeo es solo visual.
                 this.hp -= amount;
+                this.hitCooldown = 25;
                 audio.hit();
                 if (this.hp <= 0) {
                     this.hp = 0;
@@ -766,6 +800,7 @@
 
             update() {
                 if (!this.alive) return;
+                if (this.hitCooldown > 0) this.hitCooldown--;
                 this.timer += 0.05;
 
                 const distToPlayer = player.x - this.x;
@@ -803,6 +838,7 @@
                 const rx = this.x - cameraX;
                 ctx.save();
 
+                if (this.hitCooldown > 0 && this.hitCooldown % 6 < 3) ctx.globalAlpha = 0.5;
                 ctx.fillStyle = '#312e81';
                 ctx.fillRect(rx, this.y, this.w, this.h);
                 ctx.fillStyle = '#4338ca';
@@ -885,6 +921,9 @@
                 this.power2Cooldown = 0;
                 this.maxPower2Cooldown = 180;
                 this.isDashing = 0;
+                this.slideTimer = 0;
+                this.kickTimer = 0;
+                this.slideHits = new Set();
                 this.laserTimer = 0;
                 this.slashTimer = 0;
                 this.flamethrowerTimer = 0;
@@ -912,6 +951,9 @@
                 this.dashCooldown = 0;
                 this.power2Cooldown = 0;
                 this.isDashing = 0;
+                this.slideTimer = 0;
+                this.kickTimer = 0;
+                this.slideHits = new Set();
                 this.laserTimer = 0;
                 this.slashTimer = 0;
                 this.flamethrowerTimer = 0;
@@ -935,6 +977,9 @@
                     return;
                 }
 
+                this.previousBottom = this.y + this.height;
+                if (this.slideTimer > 0) this.slideTimer--;
+                if (this.kickTimer > 0) this.kickTimer--;
                 if (this.invulnerable > 0) this.invulnerable--;
                 if (this.dashCooldown > 0) this.dashCooldown--;
                 if (this.power2Cooldown > 0) this.power2Cooldown--;
@@ -969,7 +1014,12 @@
                     this.triggerPower2();
                 }
 
-                if (keys.jump && this.grounded) {
+                if (this.slideTimer > 0) {
+                    this.facing = this.slideDirection;
+                    this.vx = this.slideDirection === 'right' ? 9 : -9;
+                    particleSystem.addDust(this.x + this.width / 2, this.y + this.height);
+                }
+                if (keys.jump && this.grounded && this.slideTimer === 0) {
                     this.vy = this.jumpStrength;
                     this.grounded = false;
                     this.attachedPlatform = null;
@@ -983,7 +1033,18 @@
                 }
 
                 this.vy += this.gravity;
+                const beforeWallX = this.x;
                 this.x += this.vx;
+
+                // Solo las nuevas paredes bloquean los laterales.
+                platforms.forEach(wall => {
+                    if (!(wall instanceof ParkourWall) || this.y + this.height <= wall.y + 12 || this.y >= wall.y + wall.h) return;
+                    if (beforeWallX + this.width <= wall.x && this.x + this.width > wall.x) {
+                        this.x = wall.x - this.width;
+                    } else if (beforeWallX >= wall.x + wall.w && this.x < wall.x + wall.w) {
+                        this.x = wall.x + wall.w;
+                    }
+                });
 
                 this.grounded = false;
 
@@ -1057,7 +1118,15 @@
                 if (this.dashCooldown === 0 && this.isDashing === 0) {
                     this.dashCooldown = this.maxDashCooldown;
 
-                    if (selectedCharacter === 'blonde') {
+                    if (selectedCharacter === 'elLio') {
+                        const dir = this.facing === 'right' ? 1 : -1;
+                        this.kickTimer = 16;
+                        audio.dash();
+                        playerProjectiles.push({type: 'football',
+                            x: dir > 0 ? this.x + this.width : this.x - 18,
+                            y: this.y + this.height - 20, vx: dir * 11, vy: 0,
+                            w: 18, h: 18, life: 75, rotation: 0});
+                    } else if (selectedCharacter === 'blonde') {
                         this.laserTimer = 18;
                         audio.laser();
 
@@ -1148,9 +1217,15 @@
             }
 
             triggerPower2() {
+                if (selectedCharacter === 'elLio' && this.slideTimer > 0) return;
                 this.power2Cooldown = this.maxPower2Cooldown;
 
-                if (selectedCharacter === 'blonde') {
+                if (selectedCharacter === 'elLio') {
+                    this.slideTimer = 24;
+                    this.slideDirection = this.facing;
+                    this.slideHits.clear();
+                    audio.dash();
+                } else if (selectedCharacter === 'blonde') {
                     audio.dash();
                     const dir = this.facing === 'right' ? 1 : -1;
                     playerProjectiles.push({
@@ -1292,7 +1367,38 @@
                 const legAnim = Math.sin(this.animTimer) * 7;
                 const armAnim = Math.cos(this.animTimer) * 6;
 
-                if (selectedCharacter === 'blonde') {
+                if (selectedCharacter === 'elLio') {
+                    ctx.save();
+                    if (this.slideTimer > 0) { ctx.translate(0, 11); ctx.rotate(-Math.PI / 3); }
+                    const stride = this.vx ? legAnim * 0.5 : 0;
+                    ctx.fillStyle = '#fed7aa';
+                    ctx.fillRect(-8, -22, 16, 13);
+                    ctx.fillStyle = '#422006';
+                    ctx.fillRect(-9, -25, 18, 6);
+                    ctx.fillRect(-9, -20, 4, 7);
+                    ctx.fillRect(-5, -12, 13, 3);
+                    ctx.fillStyle = '#0f172a';
+                    ctx.fillRect(4, -18, 2, 2);
+                    // Camiseta argentina a rayas, dorsal 10 y brazalete.
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(-12, -9, 24, 17);
+                    ctx.fillStyle = '#7dd3fc';
+                    ctx.fillRect(-10, -9, 5, 17); ctx.fillRect(0, -9, 5, 17);
+                    ctx.fillStyle = '#0f172a';
+                    ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+                    ctx.fillText('10', 0, 3);
+                    ctx.fillRect(-10, 8, 20, 7);
+                    ctx.fillStyle = '#fed7aa';
+                    ctx.fillRect(-16, -5, 4, 12); ctx.fillRect(12, -5, 4, 12);
+                    ctx.fillStyle = '#fbbf24'; ctx.fillRect(-16, -3, 4, 3);
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(-9 + stride, 15, 6, 6);
+                    const kick = this.kickTimer > 0 ? 10 : -stride;
+                    ctx.fillRect(3 + kick, 15, 6, 6);
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.fillRect(-10 + stride, 21, 10, 3); ctx.fillRect(3 + kick, 21, 10, 3);
+                    ctx.restore();
+                } else if (selectedCharacter === 'blonde') {
                     // 👱‍♂️ RUBIO FACHERO CON IDENTIDAD Y SWAG
                     // Zapatillas facheras
                     ctx.fillStyle = '#f87171';
@@ -1886,6 +1992,84 @@
                 currentBoss = new Boss(3300, groundY - 80, 5);
                 flag = new Flag(3850, groundY - 170);
             }
+
+            extendParkour(levelNum, groundY);
+        }
+
+        function extendParkour(levelNum, groundY) {
+            const start = 2800;
+            // Reemplaza el tramo plano final por azoteas: no hay suelo debajo
+            // que permita saltear todo el circuito caminando.
+            levelElements = levelElements.filter(el => el.x < start);
+            levelElements.forEach(el => {
+                if (el instanceof Platform && el.y === groundY && el.x + el.w > start) {
+                    el.w = start - el.x;
+                }
+            });
+
+            // Recuperación repartida sobre suelo firme en el recorrido inicial.
+            levelElements.filter(el => el instanceof Platform && el.y === groundY && !el.motion)
+                .forEach(platform => {
+                    for (const fraction of [0.3, 0.75]) {
+                        bananas.push(new CollectibleBanana(platform.x + platform.w * fraction, groundY - 40));
+                    }
+                });
+
+            const sections = 3 + Math.ceil(levelNum / 2);
+            for (let i = 0; i < sections; i++) {
+                const x = start + i * 700;
+                const style = i % 2 ? 'neon' : 'urban';
+                const firstY = i % 2 ? 290 : 300;
+                const topY = i % 2 ? 210 : 230;
+                levelElements.push(
+                    new Platform(x, groundY, 140, 70, style),
+                    new Platform(x + 210, firstY, 110, 20, style),
+                    new Platform(x + 390, topY, 110, 20, style),
+                    new Platform(x + 570, 300, 130, 20, style)
+                );
+                // Ruta superior opcional con plataforma móvil y recompensa.
+                levelElements.push(new Platform(x + 270, 140, 90, 18, 'neon', {
+                    moveAxis: i % 2 ? 'V' : 'H', range: 25, speed: 1 + levelNum * 0.15
+                }));
+                collectibles.push(new CollectibleStar(x + 245, firstY - 40));
+                collectibles.push(new CollectibleStar(x + 430, topY - 40));
+                collectibles.push(new CollectibleStar(x + 300, 95));
+                bananas.push(new CollectibleBanana(x + 285, firstY - 40));
+                bananas.push(new CollectibleBanana(x + 620, 260));
+
+                levelElements.push(new JumpBarrierObstacle(x + 55, groundY, 30 + levelNum * 2));
+                levelElements.push(new JumpBarrierObstacle(x + 650, 300, 28));
+                if (i % 2) enemies.push(new BirdEnemy(x + 430, 160, 75, 1.8 + levelNum * 0.25));
+            }
+
+            // Arena amplia al final del parkour, con suelo hasta después de la bandera.
+            const arenaX = start + sections * 700;
+            levelElements.push(new Platform(arenaX, groundY, 1250, 70));
+            levelElements.push(new Platform(arenaX + 160, 280, 150, 20));
+            bananas.push(new CollectibleBanana(arenaX + 200, 240));
+            bananas.push(new CollectibleBanana(arenaX + 420, groundY - 40));
+            bananas.push(new CollectibleBanana(arenaX + 850, groundY - 40));
+            currentBoss = new Boss(arenaX + 550, groundY - 80, levelNum);
+            flag = new Flag(arenaX + 1050, groundY - 170);
+
+            // Agregados: conserva todos los objetos y recompensas anteriores.
+            [60, 110, 150, 90].forEach((height, i) => {
+                let x = 2420 + i * 110;
+                // No encerrar bananas ni estrellas existentes dentro de una pared.
+                while ([...bananas, ...collectibles].some(item => item.x < x + 50 && item.x + item.w > x && item.y + item.h > groundY - height && item.y < groundY)) x += 10;
+                const wall = new ParkourWall(x, groundY, height);
+                levelElements.push(wall);
+                bananas.push(new CollectibleBanana(x + 14, wall.y - 36));
+            });
+            levelElements.filter(el => el instanceof Platform && el.y === groundY && el.x < 2000)
+                .forEach(platform => bananas.push(new CollectibleBanana(platform.x + 80, groundY - 40)));
+            for (let i = 0; i < sections; i++) {
+                const x = start + i * 700;
+                const topY = i % 2 ? 210 : 230;
+                bananas.push(new CollectibleBanana(x + 100, groundY - 40));
+                bananas.push(new CollectibleBanana(x + 465, topY - 36));
+                bananas.push(new CollectibleBanana(x + 330, 95));
+            }
         }
 
         // ==========================================
@@ -1924,7 +2108,19 @@
             for (let i = playerProjectiles.length - 1; i >= 0; i--) {
                 const proj = playerProjectiles[i];
 
-                if (proj.type === 'grenade') {
+                if (proj.type === 'football') {
+                    proj.x += proj.vx; proj.rotation += proj.vx / 18; proj.life--;
+                    const target = [...enemies, currentBoss].find(e => e && e.alive &&
+                        e.x < proj.x + proj.w && e.x + e.w > proj.x &&
+                        e.y < proj.y + proj.h && e.y + e.h > proj.y);
+                    if (target) {
+                        if (target === currentBoss) target.takeDamage(1);
+                        else target.alive = false;
+                        particleSystem.addSparks(proj.x, proj.y, '#7dd3fc');
+                        proj.life = 0;
+                    }
+                    if (proj.life <= 0) playerProjectiles.splice(i, 1);
+                } else if (proj.type === 'grenade') {
                     proj.x += proj.vx;
                     proj.y += proj.vy;
                     proj.vy += 0.4;
@@ -2010,7 +2206,14 @@
 
             playerProjectiles.forEach(p => {
                 ctx.save();
-                if (p.type === 'grenade') {
+                if (p.type === 'football') {
+                    ctx.translate(p.x - cameraX + 9, p.y + 9); ctx.rotate(p.rotation);
+                    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 2; ctx.stroke();
+                    ctx.fillStyle = '#0f172a'; ctx.fillRect(-3, -3, 6, 6);
+                    ctx.fillRect(-8, -2, 3, 4); ctx.fillRect(5, -2, 3, 4);
+                    ctx.fillRect(-2, -8, 4, 3); ctx.fillRect(-2, 5, 4, 3);
+                } else if (p.type === 'grenade') {
                     ctx.fillStyle = '#f97316';
                     ctx.beginPath();
                     ctx.arc(p.x - cameraX, p.y, p.radius, 0, Math.PI * 2);
@@ -2039,6 +2242,27 @@
             });
         }
 
+        function resolveRivalContact(rival) {
+            if (player.isDead || !rival.alive) return;
+            const horizontal = player.x < rival.x + rival.w && player.x + player.width > rival.x;
+            const bottom = player.y + player.height;
+            const stomp = horizontal && player.vy > 0 && player.previousBottom <= (rival.previousY ?? rival.y) + 4 && bottom >= rival.y;
+            const overlap = horizontal && player.y < rival.y + rival.h && bottom > rival.y;
+            if (!stomp && !overlap) return;
+            if (stomp) {
+                if (rival === currentBoss) rival.takeDamage(1); else rival.alive = false;
+                player.y = rival.y - player.height;
+                player.vy = -11; player.grounded = false; player.attachedPlatform = null;
+                audio.jump(); particleSystem.addSparks(rival.x + rival.w / 2, rival.y, '#7dd3fc');
+            } else if (selectedCharacter === 'elLio' && player.slideTimer > 0) {
+                if (!player.slideHits.has(rival)) {
+                    player.slideHits.add(rival);
+                    if (rival === currentBoss) rival.takeDamage(1); else rival.alive = false;
+                    particleSystem.addSparks(rival.x, rival.y + rival.h, '#7dd3fc');
+                }
+            } else takeDamage();
+        }
+
         function loop() {
             if (gameState === 'PLAYING') {
                 player.update(levelElements);
@@ -2047,7 +2271,7 @@
                 if (cameraX < 0) cameraX = 0;
 
                 levelElements.forEach(el => el.update && el.update());
-                enemies.forEach(e => e.update && e.update());
+                enemies.forEach(e => { e.previousY = e.y; if (e.update) e.update(); });
                 if (currentBoss) currentBoss.update();
 
                 updateProjectiles();
@@ -2070,11 +2294,7 @@
                     }
                 });
 
-                enemies.forEach(e => {
-                    if (e.alive && player.x < e.x + e.w && player.x + player.width > e.x && player.y < e.y + e.h && player.y + player.height > e.y) {
-                        takeDamage();
-                    }
-                });
+                enemies.forEach(resolveRivalContact);
 
                 levelElements.forEach(el => {
                     if (el instanceof TrafficLightObstacle && el.state === 'RED') {
@@ -2089,9 +2309,7 @@
                     }
                 });
 
-                if (currentBoss && currentBoss.alive && player.x < currentBoss.x + currentBoss.w && player.x + player.width > currentBoss.x && player.y < currentBoss.y + currentBoss.h && player.y + player.height > currentBoss.y) {
-                    takeDamage();
-                }
+                if (currentBoss) resolveRivalContact(currentBoss);
 
                 if (flag && player.x < flag.x + flag.w && player.x + player.width > flag.x) {
                     if (!currentBoss || !currentBoss.alive) {
@@ -2110,6 +2328,7 @@
 
                 if (currentBoss && currentBoss.alive) {
                     bossHpContainer.classList.remove('hidden');
+                    bossNameLabel.textContent = '👾 JEFE:';
                     bossHpBar.style.width = `${(currentBoss.hp / currentBoss.maxHp) * 100}%`;
                 } else {
                     bossHpContainer.classList.add('hidden');
@@ -2236,7 +2455,10 @@
             bossProjectiles = [];
             updateHeartsUI();
 
-            if (selectedCharacter === 'blonde') {
+            if (selectedCharacter === 'elLio') {
+                powerLabel.textContent = '⚽ PELOTA [F]:';
+                power2Label.textContent = '👟 BARRIDA [G]:';
+            } else if (selectedCharacter === 'blonde') {
                 powerLabel.textContent = '⚡ LÁSER [F]:';
                 power2Label.textContent = '💣 GRANADA [G]:';
             } else if (selectedCharacter === 'cyberGirl') {
@@ -2262,6 +2484,8 @@
                 power2Label.textContent = '💥 PODER 2 [G]:';
             }
 
+            btnDash.innerHTML = selectedCharacter === 'elLio' ? 'PELOTA<br>(F)' : 'PODER 1<br>(F)';
+            btnPower2.innerHTML = selectedCharacter === 'elLio' ? 'BARRIDA<br>(G)' : 'PODER 2<br>(G)';
             buildLevel(currentLevel);
             player.reset(80, 250);
 
@@ -2303,7 +2527,7 @@
             buildLevel(1);
             player.reset(80, 250);
 
-            showOverlay('URBAN STREET RUNNER', '¡Elige entre 11 corredores cyber-urbanos con identidades únicas y supera los 5 niveles!', '¡EMPEZAR JUEGO!');
+            showOverlay('URBAN STREET RUNNER', '¡Elige entre 12 corredores cyber-urbanos con identidades únicas y supera los 5 niveles!', '¡EMPEZAR JUEGO!');
 
             loop();
         };
