@@ -321,31 +321,41 @@
                 } catch(e) {}
             },
             jump() { if (!music.enabled) this.playTone(400, 'square', 0.15); },
-            dash() { this.playTone(600, 'sawtooth', 0.1); },
-            laser() { this.playTone(800, 'sine', 0.2); },
-            slash() { this.playTone(250, 'triangle', 0.12); },
+            dash() { if (!music.enabled) this.playTone(600, 'sawtooth', 0.1); },
+            laser() { if (!music.enabled) this.playTone(800, 'sine', 0.2); },
+            slash() { if (!music.enabled) this.playTone(250, 'triangle', 0.12); },
             hit() { if (!music.enabled) this.playTone(150, 'sawtooth', 0.25); },
-            explosion() { this.playTone(80, 'square', 0.35); },
+            explosion() { if (!music.enabled) this.playTone(80, 'square', 0.35); },
             coin() { this.playTone(900, 'sine', 0.1); }
         };
 
         const music = {
-            enabled: true, timer: null, step: 0,
+            enabled: true, timer: null, step: 0, pulse: 0,
             start() {
                 if (this.timer !== null) return;
-                this.timer = setInterval(() => this.tick(), 180);
+                this.timer = setInterval(() => this.tick(), 90);
             },
             tick() {
                 if (!this.enabled || !audio.ctx || document.hidden || !['PLAYING', 'PIPE_TRAVEL'].includes(gameState)) return;
-                const tune = world === 'underworld' ? [220,262,294,220,330,294,262,196,220,0,262,294,196,165,196,0] : [330,392,440,392,523,440,392,0,330,294,330,392,294,262,294,0];
+                if (world !== 'underworld' && this.pulse++ % 2) return;
+                const tune = world === 'underworld' ? [220,330,440,330,262,392,524,392,196,294,392,294,208,311,415,494,220,330,440,523,659,523,440,330,196,294,392,440,415,311,247,208] : [330,392,440,392,523,440,392,0,330,294,330,392,294,262,294,0];
                 const index = this.step++ % tune.length;
+                if (world === 'underworld') {
+                    // Arpegio rápido, bajo y percusión: intensidad sin tapar la melodía.
+                    this.note(tune[index], 'sawtooth', 0.075, 0.022);
+                    if (index % 2 === 0) this.note([55,65.5,49,52][Math.floor(index / 4) % 4], 'square', 0.14, 0.018);
+                    if (index % 4 === 0) this.note(130, 'sine', 0.16, 0.055, 35);
+                    if (index % 4 === 2) this.note(180, 'triangle', 0.07, 0.035, 65);
+                    return;
+                }
                 this.note(tune[index], 'triangle', 0.14, 0.035);
                 if (index % 4 === 0) this.note(world === 'underworld' ? 55 : 131, 'sine', 0.3, 0.045);
             },
-            note(hz, type, duration, volume) {
+            note(hz, type, duration, volume, endHz = null) {
                 if (!hz) return;
                 const ctx = audio.ctx, osc = ctx.createOscillator(), gain = ctx.createGain();
                 osc.type = type; osc.frequency.value = hz;
+                if (endHz) osc.frequency.exponentialRampToValueAtTime(endHz, ctx.currentTime + duration);
                 gain.gain.setValueAtTime(volume, ctx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
                 osc.connect(gain); gain.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + duration);
@@ -881,6 +891,30 @@
                 ctx.save();
 
                 if (this.hitCooldown > 0 && this.hitCooldown % 6 < 3) ctx.globalAlpha = 0.5;
+                if (this.infernal) {
+                    // Armadura volcánica, grietas de magma y cuernos.
+                    ctx.fillStyle = '#292524';ctx.fillRect(rx,this.y,this.w,this.h);
+                    ctx.fillStyle = '#7f1d1d';ctx.fillRect(rx+6,this.y+6,this.w-12,this.h-12);
+                    ctx.fillStyle = '#f97316';
+                    ctx.fillRect(rx+15,this.y+35,5,28);ctx.fillRect(rx+19,this.y+48,14,5);
+                    ctx.fillRect(rx+49,this.y+32,5,40);ctx.fillRect(rx+37,this.y+62,14,5);
+                    ctx.fillStyle = '#44403c';ctx.fillRect(rx-10,this.y+18,16,30);ctx.fillRect(rx+64,this.y+18,16,30);
+                    ctx.fillStyle = '#fef08a';
+                    for(const side of [0,1]) {
+                        const hx=rx+(side?58:12);
+                        ctx.beginPath();ctx.moveTo(hx-7,this.y+6);ctx.lineTo(hx+(side?9:-9),this.y-22);ctx.lineTo(hx+7,this.y+6);ctx.fill();
+                    }
+                    ctx.fillStyle = '#1c1917';ctx.fillRect(rx+10,this.y+14,50,18);
+                    ctx.fillStyle = '#fde047';ctx.fillRect(rx+16,this.y+20,12,5);ctx.fillRect(rx+42,this.y+20,12,5);
+                    ctx.fillStyle = '#ef4444';ctx.beginPath();ctx.arc(rx+35,this.y+54,13,0,Math.PI*2);ctx.fill();
+                    ctx.fillStyle = '#fbbf24';ctx.beginPath();ctx.arc(rx+35,this.y+54,7+Math.sin(this.timer*5)*2,0,Math.PI*2);ctx.fill();
+                    ctx.fillStyle = '#fb923c';
+                    for(let i=0;i<4;i++) {
+                        const fx=rx+8+i*17;
+                        ctx.beginPath();ctx.moveTo(fx-5,this.y+this.h);ctx.lineTo(fx,this.y+this.h-12-Math.sin(this.timer*6+i)*5);ctx.lineTo(fx+6,this.y+this.h);ctx.fill();
+                    }
+                    ctx.restore();return;
+                }
                 ctx.fillStyle = '#312e81';
                 ctx.fillRect(rx, this.y, this.w, this.h);
                 ctx.fillStyle = '#4338ca';
@@ -1934,7 +1968,7 @@
             particleSystem.particles=[];levelElements=[];enemies=[];bananas=[];collectibles=[];
             levelDisplayEl.textContent = `NIVEL ${currentLevel} · INFRAMUNDO`;
             levelElements.push(new Platform(0,380,270,70,'neon'));
-            const sections = 3 + currentLevel;
+            const sections = 4 + currentLevel;
             for(let i=0;i<sections;i++) {
                 const x=270+i*480;
                 // Pilares de roca con alturas crecientes: una ruta nueva sobre la lava.
@@ -1954,6 +1988,7 @@
             levelElements.push(new Platform(arena+100,300,120,20,'neon'));
             bananas.push(new CollectibleBanana(arena+145,260));
             currentBoss=new Boss(arena+550,300,currentLevel);
+            currentBoss.infernal=true;
             flag=new Flag(arena+1050,210);
             player.reset(70,300);player.invulnerable=90;cameraX=0;
             Object.keys(keys).forEach(key=>keys[key]=false);
@@ -2562,7 +2597,7 @@
 
                 if (currentBoss && currentBoss.alive && !currentBoss.locked) {
                     bossHpContainer.classList.remove('hidden');
-                    bossNameLabel.textContent = '👾 JEFE:';
+                    bossNameLabel.textContent = currentBoss.infernal ? '🔥 JEFE DE LAVA:' : '👾 JEFE:';
                     bossHpBar.style.width = `${(currentBoss.hp / currentBoss.maxHp) * 100}%`;
                 } else {
                     bossHpContainer.classList.add('hidden');
