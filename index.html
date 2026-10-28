@@ -213,7 +213,7 @@
                 </div>
             </div>
 
-            <p class="text-xs text-sky-200 mb-2">Flechas / A-D: mover · Espacio: saltar · F / G: poderes.<br>¡Caé sobre los rivales para vencerlos! Cada impacto reduce la barra de vida del jefe.</p>
+            <p class="text-xs text-sky-200 mb-2">Flechas / A-D: mover · Espacio: saltar · F / G: poderes.<br>Banana amarilla: +1 vida · Banana verde: −1 vida.<br>¡Caé sobre los rivales para vencerlos! Cada impacto reduce la barra de vida del jefe.</p>
             <button id="startBtn" class="px-8 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 active:scale-95 text-white font-black text-base sm:text-lg rounded-2xl shadow-xl border-b-4 border-blue-800 transition duration-150">
                 ¡EMPEZAR JUEGO!
             </button>
@@ -524,7 +524,8 @@
         }
 
         class CollectibleBanana {
-            constructor(x, y) {
+            constructor(x, y, green = false) {
+                this.green = green;
                 this.x = x;
                 this.y = y;
                 this.w = 22;
@@ -540,14 +541,19 @@
                 const rx = this.x - cameraX;
 
                 ctx.save();
-                ctx.fillStyle = '#eab308';
+                ctx.fillStyle = this.green ? '#22c55e' : '#eab308';
                 ctx.fillRect(rx + 4, hoverY + 12, 14, 5);
                 ctx.fillRect(rx + 2, hoverY + 8, 5, 6);
                 ctx.fillRect(rx + 15, hoverY + 6, 5, 7);
                 ctx.fillStyle = '#15803d';
                 ctx.fillRect(rx + 17, hoverY + 3, 3, 4);
-                ctx.fillStyle = '#fef08a';
+                ctx.fillStyle = this.green ? '#86efac' : '#fef08a';
                 ctx.fillRect(rx + 6, hoverY + 10, 8, 2);
+                if (this.green) {
+                    ctx.fillStyle = '#bbf7d0';
+                    ctx.font = 'bold 10px monospace';
+                    ctx.fillText('-1', rx + 3, hoverY - 3);
+                }
                 ctx.restore();
             }
         }
@@ -794,6 +800,7 @@
                 if (this.hp <= 0) {
                     this.hp = 0;
                     this.alive = false;
+                    celebrateLio(this);
                     audio.explosion();
                 }
             }
@@ -1994,6 +2001,13 @@
             }
 
             extendParkour(levelNum, groundY);
+            // Menos frutas: conservar una amarilla de cada tres y unas pocas verdes.
+            bananas.sort((a, b) => a.x - b.x);
+            bananas = bananas.filter((banana, i) => {
+                if (i % 3 === 0) return true;
+                if (i % 6 === 2) { banana.green = true; return true; }
+                return false;
+            });
         }
 
         function extendParkour(levelNum, groundY) {
@@ -2115,7 +2129,7 @@
                         e.y < proj.y + proj.h && e.y + e.h > proj.y);
                     if (target) {
                         if (target === currentBoss) target.takeDamage(1);
-                        else target.alive = false;
+                        else defeatRival(target);
                         particleSystem.addSparks(proj.x, proj.y, '#7dd3fc');
                         proj.life = 0;
                     }
@@ -2250,20 +2264,103 @@
             const overlap = horizontal && player.y < rival.y + rival.h && bottom > rival.y;
             if (!stomp && !overlap) return;
             if (stomp) {
-                if (rival === currentBoss) rival.takeDamage(1); else rival.alive = false;
+                if (rival === currentBoss) rival.takeDamage(1); else defeatRival(rival);
                 player.y = rival.y - player.height;
                 player.vy = -11; player.grounded = false; player.attachedPlatform = null;
                 audio.jump(); particleSystem.addSparks(rival.x + rival.w / 2, rival.y, '#7dd3fc');
             } else if (selectedCharacter === 'elLio' && player.slideTimer > 0) {
                 if (!player.slideHits.has(rival)) {
                     player.slideHits.add(rival);
-                    if (rival === currentBoss) rival.takeDamage(1); else rival.alive = false;
+                    if (rival === currentBoss) rival.takeDamage(1); else defeatRival(rival);
                     particleSystem.addSparks(rival.x, rival.y + rival.h, '#7dd3fc');
                 }
             } else takeDamage();
         }
 
+        let goalCheers = [];
+        let lioDefeatCount = 0;
+        let lioDefeat = null;
+
+        function celebrateLio(rival) {
+            if (selectedCharacter === 'elLio' && !player.isDead) {
+                goalCheers.push({x: rival.x + rival.w / 2, y: rival.y, life: 75});
+            }
+        }
+
+        function defeatRival(rival) {
+            if (!rival.alive) return;
+            rival.alive = false;
+            celebrateLio(rival);
+        }
+
+        function collectBanana(b) {
+            if (b.collected || player.isDead) return;
+            b.collected = true;
+            if (b.green) takeDamage(false, true);
+            else {
+                if (lives < maxLives) lives++;
+                updateHeartsUI();
+                audio.coin();
+            }
+        }
+
+        function drawFootballEffects() {
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.font = 'bold 22px monospace';
+            goalCheers.forEach(cheer => {
+                ctx.globalAlpha = Math.min(1, cheer.life / 20);
+                ctx.strokeStyle = '#082f49'; ctx.lineWidth = 4;
+                const y = cheer.y - 15 - (75 - cheer.life) * 0.45;
+                ctx.strokeText('GOOOOL', cheer.x - cameraX, y);
+                ctx.fillStyle = '#fef08a'; ctx.fillText('GOOOOL', cheer.x - cameraX, y);
+                if (gameState === 'PLAYING') cheer.life--;
+            });
+            goalCheers = goalCheers.filter(cheer => cheer.life > 0);
+            ctx.restore();
+            if (!lioDefeat) return;
+
+            const scene = lioDefeat;
+            const approach = Math.min(1, scene.frame / 55);
+            const x = scene.x + 150 * (1 - approach) + 32;
+            const y = scene.y;
+            ctx.save();
+            ctx.translate(x, y);
+            // Árbitro amarillo o rival de camiseta roja, dibujados en pixel art.
+            if (scene.type === 'foul' && approach === 1) { ctx.translate(0, 12); ctx.rotate(-0.9); }
+            ctx.fillStyle = '#fed7aa'; ctx.fillRect(-7, -46, 14, 12);
+            ctx.fillStyle = '#292524'; ctx.fillRect(-8, -49, 16, 5);
+            ctx.fillStyle = scene.type === 'red' ? '#fde047' : '#ef4444';
+            ctx.fillRect(-11, -34, 22, 19);
+            ctx.fillStyle = '#111827'; ctx.fillRect(-10, -15, 20, 8);
+            const stride = approach < 1 ? Math.sin(scene.frame * 0.4) * 4 : 0;
+            ctx.fillRect(-9 + stride, -7, 6, 7); ctx.fillRect(3 - stride, -7, 6, 7);
+            ctx.fillStyle = '#fff'; ctx.fillRect(-11 + stride, 0, 9, 4); ctx.fillRect(3 - stride, 0, 9, 4);
+            ctx.fillStyle = '#fed7aa';
+            if (scene.type === 'red' && approach === 1) {
+                ctx.fillRect(-17, -47, 6, 22);
+                ctx.fillStyle = '#ef4444'; ctx.fillRect(-20, -62, 12, 18);
+            } else ctx.fillRect(-16, -32, 5, 16);
+            ctx.restore();
+            if (approach === 1) {
+                ctx.save(); ctx.textAlign = 'center'; ctx.font = 'bold 25px monospace';
+                ctx.fillStyle = scene.type === 'red' ? '#f87171' : '#fde047';
+                ctx.strokeStyle = '#020617'; ctx.lineWidth = 5;
+                const label = scene.type === 'red' ? '¡TARJETA ROJA!' : 'faullll';
+                ctx.strokeText(label, scene.x, y - 90); ctx.fillText(label, scene.x, y - 90);
+                ctx.restore();
+            }
+        }
+
         function loop() {
+            if (gameState === 'LIO_DEFEAT' && lioDefeat) {
+                lioDefeat.frame++;
+                if (lioDefeat.type === 'foul' && lioDefeat.frame >= 55) player.deathRotation = Math.PI / 2;
+                if (lioDefeat.frame >= 160) {
+                    gameState = 'GAME_OVER';
+                    showOverlay('¡GAME OVER!', 'El Lio se quedó sin vidas. ¡Volvé a intentarlo!', 'REINTENTAR');
+                }
+            }
             if (gameState === 'PLAYING') {
                 player.update(levelElements);
 
@@ -2287,10 +2384,7 @@
 
                 bananas.forEach(b => {
                     if (!b.collected && player.x < b.x + b.w && player.x + player.width > b.x && player.y < b.y + b.h && player.y + player.height > b.y) {
-                        b.collected = true;
-                        if (lives < maxLives) lives++;
-                        updateHeartsUI();
-                        audio.coin();
+                        collectBanana(b);
                     }
                 });
 
@@ -2311,7 +2405,7 @@
 
                 if (currentBoss) resolveRivalContact(currentBoss);
 
-                if (flag && player.x < flag.x + flag.w && player.x + player.width > flag.x) {
+                if (!player.isDead && flag && player.x < flag.x + flag.w && player.x + player.width > flag.x) {
                     if (!currentBoss || !currentBoss.alive) {
                         if (currentLevel < totalLevels) {
                             gameState = 'LEVEL_WIN';
@@ -2348,6 +2442,7 @@
             particleSystem.draw(cameraX);
 
             player.draw(cameraX);
+            drawFootballEffects();
 
             requestAnimationFrame(loop);
         }
@@ -2397,8 +2492,9 @@
             missingLivesText.textContent = `(Faltan: ${maxLives - lives})`;
         }
 
-        function takeDamage(instantKill = false) {
-            if (player.invulnerable > 0 && !instantKill) return;
+        function takeDamage(instantKill = false, greenBanana = false) {
+            if (player.isDead) return;
+            if (player.invulnerable > 0 && !instantKill && !greenBanana) return;
 
             if (instantKill) {
                 lives = 0;
@@ -2415,6 +2511,18 @@
                 player.isDead = true;
                 player.vy = -8;
                 audio.explosion();
+
+                if (selectedCharacter === 'elLio') {
+                    const type = lioDefeatCount++ % 2 === 0 ? 'red' : 'foul';
+                    const x = Math.max(100, Math.min(GAME_WIDTH - 190, player.x - cameraX));
+                    const y = Math.max(120, Math.min(380, player.y + player.height));
+                    lioDefeat = {type, frame: 0, x, y};
+                    player.x = cameraX + x; player.y = y - player.height;
+                    player.vx = 0; player.vy = 0; player.invulnerable = 0;
+                    player.deathRotation = 0; player.slideTimer = 0;
+                    gameState = 'LIO_DEFEAT';
+                    return;
+                }
 
                 setTimeout(() => {
                     gameState = 'GAME_OVER';
@@ -2442,6 +2550,8 @@
         // ==========================================
         function startGame() {
             audio.init();
+            goalCheers = [];
+            lioDefeat = null;
 
             if (gameState === 'START' || gameState === 'GAME_OVER' || gameState === 'WIN') {
                 currentLevel = 1;
